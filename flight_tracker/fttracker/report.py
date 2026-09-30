@@ -26,6 +26,24 @@ def flex_text(fs: dict[str, Any] | None) -> str:
     return f"{fs['dates']} – {fs['value_saving']:,.0f} better on value score ({price})"
 
 
+def insights_text(gi: dict[str, Any] | None) -> str | None:
+    if not gi:
+        return None
+    rng = gi.get("typical_price_range") or []
+    level = (gi.get("price_level") or "").upper() or "n/a"
+    typ = f", typical AUD {rng[0]:,.0f}–{rng[1]:,.0f}" if len(rng) == 2 else ""
+    low = f", lowest now AUD {gi['lowest_price']:,.0f}" if gi.get("lowest_price") is not None else ""
+    return f"{level}{typ}{low}"
+
+
+def usage_text(u: dict[str, Any] | None) -> str | None:
+    if not u:
+        return None
+    left = u.get("total_searches_left", u.get("plan_searches_left"))
+    return (f"SerpApi: {u.get('this_month_usage', '?')} searches used this month, {left} left"
+            + (f" ({u['plan_name']})" if u.get("plan_name") else ""))
+
+
 def headline(r: dict[str, Any]) -> str:
     return SUBJECT.format(day=r.get("day") or "–", decision=r["decision"]["decision"])
 
@@ -72,6 +90,10 @@ def to_text(r: dict[str, Any]) -> str:
     lines.append(f"Trend vs baseline:  {_pct(t.get('vs_baseline_pct'))}")
     fs = r.get("flex_saving")
     lines.append(f"Best flex-date saving: {flex_text(fs)}")
+    if insights_text(r.get("google_insights")):
+        lines.append(f"Google price level: {insights_text(r['google_insights'])}")
+    if r.get("flex_checked_at") and not r.get("flex_searched"):
+        lines.append(f"(flex dates last checked {r['flex_checked_at'][:16].replace('T', ' ')})")
     j = r.get("jev", {})
     if j.get("ok"):
         lines.append(f"JEV: P(book today) = {j['buy_probability']:.0%}" if j.get("buy_probability") is not None
@@ -213,12 +235,16 @@ def to_html(r: dict[str, Any] | None, recent_runs: list[dict[str, Any]] | None =
              f"route {b['route']} · {'/'.join(b['carriers'])}" if b else "no fares retrieved"),
             ("vs yesterday", _pct(t.get("vs_previous_pct")), "value score"),
             ("vs baseline (day 1)", _pct(t.get("vs_baseline_pct")), "value score"),
-            ("Best flex dates", fs["dates"] if fs else "none", flex_sub),
+            ("Best flex dates", fs["dates"] if fs else "none",
+             flex_sub + (f" · checked {r['flex_checked_at'][11:16]} {r['flex_checked_at'][8:10]}/{r['flex_checked_at'][5:7]}"
+                         if r.get("flex_checked_at") and not r.get("flex_searched") else "")),
+            ("Google price level", ((r.get("google_insights") or {}).get("price_level") or "–").upper(),
+             (insights_text(r.get("google_insights")) or "no insight returned").split(", ", 1)[-1]),
             ("Days to book-by", cal.get("days_to_book_by", "–"), "14 Oct 2026"),
             ("Days to departure", cal.get("days_to_departure", "–"), "21 Dec 2026"),
         ]) + "</div>")
 
-    parts.append("<h2>Top 3 options</h2>" + _options_table(r.get("top3", [])))
+    parts.append("<h2>Top 3 options – 21 Dec / 8 Jan</h2>" + _options_table(r.get("top3", [])))
     parts.append("<h2>Suggestions</h2><ul>" + "".join(f"<li>{_e(x)}</li>" for x in r.get("suggestions", [])) + "</ul>")
 
     hist = s.get("history", {})
@@ -226,6 +252,13 @@ def to_html(r: dict[str, Any] | None, recent_runs: list[dict[str, Any]] | None =
     if b:
         closes.append((run_at.date().isoformat(), b["value_score"]))
     parts.append("<h2>Best value score by day</h2><div class='card'>" + _sparkline(closes) + "</div>")
+
+    gh = (r.get("google_insights") or {}).get("price_history") or []
+    if len(gh) >= 2:
+        pts = [(dt.datetime.fromtimestamp(t, dt.timezone.utc).date().isoformat(), float(p)) for t, p in gh
+               if isinstance(t, (int, float)) and isinstance(p, (int, float))]
+        parts.append("<h2>Google's price history for the primary dates</h2><div class='card'>"
+                     + _sparkline(pts) + "</div>")
 
     stat_rows = [(k.replace("_", " "), v) for k, v in hist.items()
                  if k not in ("recent_closes", "daily_change_pct", "intraday") and not isinstance(v, (list, dict))]
@@ -253,7 +286,8 @@ def to_html(r: dict[str, Any] | None, recent_runs: list[dict[str, Any]] | None =
 
     parts.append("<h2>JEV second opinion</h2>" + _jev_panel(r.get("jev", {})))
 
-    parts.append("<h2>Providers this run</h2><div class='scroll'><table><thead><tr><th>Provider</th><th>Status</th>"
+    ut = usage_text(r.get("api_usage"))
+    parts.append("<h2>Providers this run</h2>" + (f"<p class='muted'>{_e(ut)}</p>" if ut else "") + "<div class='scroll'><table><thead><tr><th>Provider</th><th>Status</th>"
                  "<th class='num'>API calls</th><th class='num'>Itineraries</th><th>Notes</th></tr></thead><tbody>" + "".join(
                      f"<tr><td>{_e(p['provider'])}</td><td>{'skipped' if p['skipped'] else ('ok' if p['ok'] else 'FAILED')}</td>"
                      f"<td class='num'>{p['calls']}</td><td class='num'>{p['itineraries']}</td>"

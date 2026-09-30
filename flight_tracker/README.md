@@ -17,8 +17,8 @@ Python 3.12. No database service is needed: on Vercel every run is stored as JSO
 ## How it works
 
 ```
-Ignav (primary) ─┐
-SerpApi (opt.)  ─┼─> normalise -> classify route A–E -> value_score -> rules -> JEV 2nd opinion -> store -> dashboard
+Ignav (primary)          ─┐
+Google Flights (SerpApi) ─┼─> normalise -> classify route A–E -> value_score -> rules -> JEV 2nd opinion -> store -> dashboard
                  └─ raw JSON of every call stored per run (audit)
 ```
 
@@ -119,8 +119,12 @@ pytest -q
 
 **Check the Ignav parser before relying on it.** Ignav's docs couldn't be read from the build environment.
 The adapter follows the published endpoint (`POST https://ignav.com/api/fares/round-trip`, `X-Api-Key`
-header) and accepts the common field-name variants. Run `python tracker.py probe` once with your key and
-compare `data/probe_ignav.json` with the parsed lines it prints. If a field is named differently, add it to
+header) and accepts the common field-name variants. Check it once with your key, either:
+
+- on Vercel: open `/api/selftest?probe=ignav&secret=<CRON_SECRET>`. It makes one search and shows the
+  request body, the response's field names, and what the parser extracted; or
+- locally: run `python tracker.py probe` and compare `data/probe_ignav.json` with the parsed lines it
+  prints. If a field is named differently, add it to
 the `_first(...)` lists in `fttracker/providers/ignav.py`. If the request body needs different keys, set
 `providers.ignav.extra_body` in config.yaml.
 
@@ -167,27 +171,38 @@ They are three separate once-a-day entries, which is the pattern that fits Hobby
 each can fire any time within its hour. Check the current limits at
 <https://vercel.com/docs/cron-jobs/usage-and-pricing>.
 
-`maxDuration` is 300s. Ignav calls run 4 in parallel, so a normal run takes well under a minute.
+`maxDuration` is 300s. Calls run 4 in parallel per provider, so a normal run takes well under a minute.
+
+**Sources.** Ignav and Google Flights (via SerpApi) both search each run. Their fares are merged and
+de-duplicated. The same flights sold as one ticket and as a self-transfer combo are kept as separate
+options. Either source can fail or be switched off, and the dashboard says which one did. Google also
+returns its own **price insights** for the primary dates: a low/typical/high verdict, the typical price
+range and a price-history chart. These are shown on the dashboard and sent to JEV.
+
+**Best option vs flex dates.** The BUY/HOLD rules track the best single-ticket option on the **primary
+dates** (21 Dec / 8 Jan), so every run is compared like for like. Flex dates are searched **once a day** on
+the 17:00 run (`trip.flex_from_hour`) and reported separately as the "best flex-date saving". The two
+earlier runs carry that result forward, showing when it was last checked.
 
 ## Cost per run
 
 | Service | Calls per run | Per day (3 runs) | Oct 1 → 31 |
 |---|---|---|---|
-| Ignav | 7 (`flex_mode: cross`) or 16 (`grid`) | 21 / 48 | ~650 / ~1,490 |
-| SerpApi (optional) | 3 (1 search + 2 return-leg expansions, primary dates only) | 9 | ~280 |
+| Ignav | 1 on morning and midday runs, 7 on the 17:00 run (all date pairs) | 9 | ~290 |
+| Google Flights (SerpApi) | 4 on morning and midday runs (1 search + 3 return-leg expansions); 16 on the 17:00 run (+2 per flex pair) | 24 | ~770 |
 | JEV (optional) | 1 (~8–15k input tokens: stats + top 10 options) | 3 | ~93 |
 | Vercel + Blob | 1 function run of up to ~60s; ~10–20 small JSON writes | ~50 | Hobby free tier normally covers this |
 
 Cost per run = calls × your plan's per-call price. Check the current prices:
 
 - Ignav: <https://ignav.com/pricing>
-- SerpApi: <https://serpapi.com/pricing>. The free tier is unlikely to cover ~280 searches a month, so
-  lower `return_legs_for_top_n` or disable SerpApi if needed.
+- SerpApi: <https://serpapi.com/pricing>. The free tier won't cover ~770 searches a month. To cut Google
+  calls, set `serpapi.primary_dates_only: true` (12/day, ~385 total) or lower `return_legs_primary`. The
+  dashboard shows searches used and left, read from SerpApi's free account endpoint.
 - JEV: your typesafe.ai plan.
 
 The run count per provider is also stored on every run (`api_calls` in `/api/report`), so actual usage can
-be checked. To cut cost, use `flex_mode: cross` (the default), set `serpapi.enabled: false`, or remove one
-of the three crons.
+be checked. To cut cost further, set `serpapi.enabled: false` or remove one of the three crons.
 
 ## Layout
 

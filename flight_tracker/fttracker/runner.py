@@ -62,10 +62,20 @@ def _history(storage: Storage, run_id: int, today: dt.date, basis: str) -> tuple
 
 
 def suggestions(best: Itinerary | None, its: list[Itinerary], tstats: dict[str, Any],
-                cal: dict[str, Any], jev_answers: dict[str, Any]) -> list[str]:
+                cal: dict[str, Any], jev_answers: dict[str, Any],
+                insights: dict[str, Any] | None = None) -> list[str]:
     out: list[str] = []
     if best is None:
         return ["No usable fares today – check Qantas, SAA and Emirates directly before relying on this tracker."]
+    level = (insights or {}).get("price_level")
+    rng = (insights or {}).get("typical_price_range") or []
+    if level and len(rng) == 2:
+        if level == "low":
+            out.append(f"Google Flights rates today's prices as LOW for these dates (typical AUD {rng[0]:,.0f}–"
+                       f"{rng[1]:,.0f}) – a good moment if the rules are close to a BUY.")
+        elif level == "high":
+            out.append(f"Google Flights rates today's prices as HIGH (typical AUD {rng[0]:,.0f}–{rng[1]:,.0f}) – "
+                       "unless the book-by date forces it, waiting a few days is reasonable.")
     fs = tstats.get("flex_saving")
     if fs and fs["price_saving"] and fs["price_saving"] >= 100:
         out.append(f"Flying {fs['dates']} instead is AUD {fs['price_saving']:,.0f} cheaper – worth it if your leave can move.")
@@ -130,7 +140,10 @@ def _run(settings: Settings, storage: Storage, now: dt.datetime, today: dt.date,
         path.write_text(json.dumps(payload, indent=2, default=str))
         return str(path)
 
-    pairs = settings.trip.date_pairs()
+    # Flex dates once a day (first run at/after flex_from_hour); primary dates every run.
+    flex_this_run = now.hour >= settings.trip.flex_from_hour
+    all_pairs = settings.trip.date_pairs()
+    pairs = all_pairs if flex_this_run else all_pairs[:1]
     results: list[ProviderResult] = []
     if fixtures:
         results.append(FixtureProvider(settings, save_raw, fixtures).search(pairs))
@@ -155,14 +168,31 @@ def _run(settings: Settings, storage: Storage, now: dt.datetime, today: dt.date,
         if (it.outbound_date, it.return_date) == primary:
             it.notes.append("primary")
     its = score_all(its, settings.scoring)
-    ranked = sorted(its, key=lambda i: (not i.single_ticket, i.too_long, i.value_score, i.price))
-    best = best_single_ticket(its)
+    # The tracked "best option" is on the primary dates (21 Dec / 8 Jan) so that the trend is
+    # comparable run to run; flex dates are reported separately as a possible saving.
+    rank_key = lambda i: (not i.single_ticket, i.too_long, i.value_score, i.price)  # noqa: E731
+    ranked = sorted(its, key=rank_key)
+    ranked_primary = [i for i in ranked if "primary" in i.notes]
+    best = best_single_ticket(ranked_primary)
 
     history, runs_today = _history(storage, run_id, today, dcfg.trend_basis)
     current = Point(today, best.value_score, best.price) if best else None
     decision: Decision = decide(today, current, history, dcfg)
 
     tstats = today_stats(its, settings)
+    flex_checked_at = now.isoformat() if flex_this_run else None
+    if not flex_this_run:
+        # carry the last flex-date check forward so the dashboard always shows one
+        prev = storage.latest_report()
+        if prev and prev.get("flex_checked_at"):
+            tstats["flex_saving"] = prev.get("flex_saving")
+            tstats["by_date_pair"] = {**prev.get("stats", {}).get("today", {}).get("by_date_pair", {}),
+                                      **tstats["by_date_pair"]}
+            flex_checked_at = prev["flex_checked_at"]
+    extras: dict[str, Any] = {}
+    for r in results:
+        for k, v in r.extras.items():
+            extras.setdefault(k, v)
     cal = calendar_stats(today, settings)
     hstats = history_stats([(p.date, p.value_score, p.price) for p in history],
                            best.value_score if best else None, runs_today)
@@ -187,11 +217,12 @@ def _run(settings: Settings, storage: Storage, now: dt.datetime, today: dt.date,
                       "outbound": str(settings.trip.outbound), "return": str(settings.trip.return_date),
                       "adults": settings.trip.adults, "cabin": settings.trip.cabin,
                       "currency": settings.trip.currency},
-             "calendar": cal, "today": tstats, "history": hstats},
+             "calendar": cal, "today": tstats, "history": hstats,
+             "google_price_insights": extras.get("price_insights")},
             {"decision": decision.decision, "reason": decision.reason, "rule": decision.rule,
              "vs_baseline_pct": decision.vs_baseline_pct, "vs_previous_pct": decision.vs_previous_pct,
              "rising_streak": decision.rising_streak},
-            [option_summary(i) for i in ranked[:10]],
+            [option_summary(i) for i in ranked_primary[:10]],
             {k: str(v) for k, v in dcfg.__dict__.items()},
             provider_status,
         )
@@ -238,10 +269,15 @@ def _run(settings: Settings, storage: Storage, now: dt.datetime, today: dt.date,
         "day": decision.day,
         "decision": {k: v for k, v in decision.__dict__.items()},
         "best": ({**option_summary(best), "booking_link": best.booking_link} if best else None),
-        "top3": [{**option_summary(i), "booking_link": i.booking_link} for i in ranked[:3]],
+        "top3": [{**option_summary(i), "booking_link": i.booking_link} for i in ranked_primary[:3]],
+        "flex_searched": flex_this_run,
+        "flex_checked_at": flex_checked_at,
+        "google_insights": extras.get("price_insights"),
+        "api_usage": extras.get("account"),
         "trend": trend,
         "flex_saving": tstats["flex_saving"],
-        "suggestions": suggestions(best, its, tstats, cal, jev_result.get("answers", {})),
+        "suggestions": suggestions(best, its, tstats, cal, jev_result.get("answers", {}),
+                                   extras.get("price_insights")),
         "providers": provider_status,
         "jev": jev_result,
         "stats": {"today": tstats, "history": hstats, "calendar": cal},

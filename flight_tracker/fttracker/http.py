@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import Any, Callable
 
@@ -10,9 +11,17 @@ import requests
 log = logging.getLogger(__name__)
 
 
+_SECRET_PARAM = re.compile(r"((?:api_key|apikey|key|token)=)[^&\s'\"]+", re.I)
+
+
+def redact(text: str) -> str:
+    """Strip credentials that some APIs (SerpApi) carry in the query string."""
+    return _SECRET_PARAM.sub(r"\1***", text)
+
+
 class HttpError(RuntimeError):
     def __init__(self, message: str, status: int | None = None):
-        super().__init__(message)
+        super().__init__(redact(message))
         self.status = status
 
 
@@ -50,7 +59,7 @@ def request_json(
                 except ValueError as exc:
                     raise HttpError(f"Response was not JSON: {resp.text[:300]}") from exc
         except requests.RequestException as exc:
-            last_err = f"{type(exc).__name__}: {exc}"
+            last_err = redact(f"{type(exc).__name__}: {exc}")
         if attempt < retries:
             wait = backoff_base_s * (2 ** attempt)
             log.warning("%s %s failed (%s); retry %d/%d in %.0fs",

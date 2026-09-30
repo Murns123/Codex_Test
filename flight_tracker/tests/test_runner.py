@@ -17,11 +17,15 @@ def at(day, hour=17):
 def test_first_run_sets_baseline(settings):
     r = run(settings, now=at(1), fixtures=FIX)
     assert r["day"] == 1 and r["decision"]["rule"] == "baseline"
-    # best single ticket: EK 3150 has 5h10m + 4h05m over 22h -> value 3150 + 50*9.25 = 3612.5
-    # QF 3290 on 20 Dec (22.5h out, 23.7h back) -> 3290 + 25 + 83 = 3398 -> wins
-    assert r["best"]["price_aud"] == 3290 and r["best"]["route"] == "A"
-    assert [o["single_ticket"] for o in r["top3"]] == [True, True, True]
-    assert r["flex_saving"]["dates"] == "20 Dec–08 Jan"
+    # best is tracked on the primary dates (21 Dec / 8 Jan):
+    #   QF 3420: 22.5h out, 23.7h back -> 3420 + 25 + 83 = 3528   <- best
+    #   EK 3150: 27.2h out, 26.1h back -> 3150 + 258 + 204 = 3612
+    #   2700 self-transfer on the same QF flights must not knock out the 3420 single ticket
+    assert r["best"]["price_aud"] == 3420 and r["best"]["route"] == "A"
+    assert [o["price_aud"] for o in r["top3"]] == [3420, 3150, 2700]
+    assert [o["single_ticket"] for o in r["top3"]] == [True, True, False]
+    assert r["flex_searched"] is True
+    assert r["flex_saving"]["dates"] == "20 Dec–08 Jan" and r["flex_saving"]["price_saving"] == 130
     assert r["status"] == "fixture" and r["fixture_data"]
     assert "FIXTURE" in r["summary_line"]
     assert headline(r) == "Flight analysis – MEL to ELS | Day 1 – HOLD"
@@ -51,6 +55,8 @@ def test_no_providers_configured_reports_failure_without_fares(settings):
     assert r["status"] == "failed"
     assert r["best"] is None and r["top3"] == []
     assert r["decision"]["rule"] == "no_data"
+    assert [p["provider"] for p in r["providers"]] == ["ignav", "serpapi"]
+    assert all(p["skipped"] for p in r["providers"])
     assert "IGNAV_API_KEY" in " ".join(r["providers"][0]["errors"])
     text = to_text(r)
     assert "nothing is shown rather than guessing" in text
@@ -73,3 +79,15 @@ def test_html_renders(settings):
     s.close()
     assert "FIXTURE DATA" in page and "Top 3 options" in page and "<table>" in page
     assert to_html(None).count("No runs yet") == 1
+
+
+def test_flex_dates_only_on_evening_run_and_carried_forward(settings):
+    morning = run(settings, now=at(1, 7), fixtures=FIX)
+    assert morning["flex_searched"] is False and morning["flex_saving"] is None
+    evening = run(settings, now=at(1, 17), fixtures=FIX)
+    assert evening["flex_searched"] is True and evening["flex_saving"]
+    next_morning = run(settings, now=at(2, 7), fixtures=FIX)
+    assert next_morning["flex_searched"] is False
+    assert next_morning["flex_saving"] == evening["flex_saving"]
+    assert next_morning["flex_checked_at"] == evening["flex_checked_at"]
+    assert next_morning["api_calls"]["fixture"] == 1   # primary pair only

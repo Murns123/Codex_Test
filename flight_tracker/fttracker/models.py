@@ -91,7 +91,9 @@ class Itinerary:
             f"{s.carrier}{s.flight_number or ''}{s.origin}{s.destination}"
             for s in self.outbound.segments + self.inbound.segments
         )
-        return f"{self.outbound_date}:{self.return_date}:{segs}"
+        # ticketing is part of identity: the same flights sold as one ticket and as a
+        # self-transfer combo are different products and must both survive de-duplication
+        return f"{self.outbound_date}:{self.return_date}:{int(self.single_ticket)}:{segs}"
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -109,3 +111,4 @@ class ProviderResult:
     calls: int = 0
     raw_files: list[str] = field(default_factory=list)
     skipped: bool = False            # not configured (e.g. no key) – not a failure
+    extras: dict[str, Any] = field(default_factory=dict)   # e.g. Google price insights, API usage

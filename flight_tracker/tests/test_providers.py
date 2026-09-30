@@ -96,3 +96,13 @@ def test_http_does_not_retry_auth_errors():
     with pytest.raises(HttpError, match="401"):
         request_json("GET", "http://x", session=s, sleep=lambda _: None)
     assert s.calls == 1
+
+
+def test_http_errors_never_carry_api_keys():
+    class Boom:
+        def request(self, *a, **k):
+            raise requests.ConnectionError("Max retries exceeded with url: /search.json?engine=x&api_key=SECRET123&q=1")
+
+    with pytest.raises(HttpError) as e:
+        request_json("GET", "http://x", session=Boom(), sleep=lambda _: None, retries=0)
+    assert "SECRET123" not in str(e.value) and "api_key=***" in str(e.value)

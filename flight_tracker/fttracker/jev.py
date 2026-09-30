@@ -33,8 +33,9 @@ QUESTIONS: dict[str, dict[str, Any]] = {
     "trend_is_upward": _noul(
         "Do the daily closes, regression slopes and streaks show a genuine upward trend rather than noise?"),
     "current_is_good_price": _noul(
-        "Relative to the observed history and today's distribution of fares, is today's best single-ticket "
-        "price a good price for this route and season?"),
+        "Relative to the observed history, today's distribution of fares and Google's own price insights "
+        "(price level, typical range, price history), is today's best single-ticket price a good price for "
+        "this route and season?"),
     "volatility_high": _noul(
         "Is day-to-day price volatility high enough that waiting carries meaningful risk of a large jump?"),
     # --- option quality ---------------------------------------------------------
@@ -92,6 +93,7 @@ def build_state(stats: dict[str, Any], decision: dict[str, Any], top: list[dict[
         "calendar": stats["calendar"],
         "today": stats["today"],
         "history": stats["history"],
+        "google_price_insights": stats.get("google_price_insights"),
         "top_options": top,
         "rules_engine_decision": decision,
         "decision_rules": rules,

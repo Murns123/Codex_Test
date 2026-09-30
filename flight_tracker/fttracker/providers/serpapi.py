@@ -1,9 +1,10 @@
-"""SerpApi Google Flights engine (optional cross-check).
+"""Google Flights via SerpApi – second fare source alongside Ignav.
 
 Round trips on Google Flights are two-step: the first call lists outbound
 options (price = full round-trip price), and each outbound option's
 `departure_token` must be sent back to get its matching return flights.
-To keep cost down we only expand the cheapest N outbound options.
+To keep cost down we only expand the cheapest N outbound options
+(3 on the primary dates, 1 on each flex pair by default).
 Docs: https://serpapi.com/google-flights-api
 """
 from __future__ import annotations
@@ -12,6 +13,7 @@ import datetime as dt
 import json
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from ..http import HttpError, request_json
@@ -65,7 +67,7 @@ class SerpApiProvider(FareProvider):
         if not self.cfg.get("enabled", True):
             return False, "disabled in config.yaml"
         if not self.settings.env.get("SERPAPI_KEY"):
-            return False, "SERPAPI_KEY not set (optional)"
+            return False, "SERPAPI_KEY is not set"
         return True, ""
 
     def _params(self, out_date: dt.date, ret_date: dt.date) -> dict[str, Any]:
@@ -92,39 +94,73 @@ class SerpApiProvider(FareProvider):
             raise HttpError(f"SerpApi error: {payload['error']}")
         return payload
 
+    def account(self) -> dict[str, Any] | None:
+        """Remaining searches on the SerpApi plan (this endpoint is free)."""
+        try:
+            a = request_json("GET", "https://serpapi.com/account.json",
+                             params={"api_key": self.settings.env["SERPAPI_KEY"]}, **{**self.http_kwargs, "retries": 0})
+        except HttpError:
+            return None
+        keys = ("plan_name", "searches_per_month", "plan_searches_left", "total_searches_left", "this_month_usage")
+        return {k: a.get(k) for k in keys if k in a}
+
+    def _search_pair(self, pair: tuple[dt.date, dt.date], top_n: int) -> dict[str, Any]:
+        """All HTTP for one date pair. Runs in a worker thread, so it only returns data;
+        storing raw JSON and building itineraries happens on the main thread."""
+        out_date, ret_date = pair
+        params = self._params(out_date, ret_date)
+        result: dict[str, Any] = {"params": params, "first": None, "error": None, "returns": []}
+        try:
+            result["first"] = self._get(params)
+        except HttpError as exc:
+            result["error"] = str(exc)
+            return result
+        outs = sorted((o for o in options(result["first"]) if o.get("price") is not None and o.get("departure_token")),
+                      key=lambda o: o["price"])[:top_n]
+        for out_opt in outs:
+            try:
+                second = self._get({**params, "departure_token": out_opt["departure_token"]})
+                result["returns"].append((out_opt, second, None))
+            except HttpError as exc:
+                result["returns"].append((out_opt, None, str(exc)))
+        return result
+
     def search(self, pairs: list[tuple[dt.date, dt.date]]) -> ProviderResult:
         res = ProviderResult(provider=self.name, ok=False)
-        if self.cfg.get("primary_dates_only", True):
+        if self.cfg.get("primary_dates_only", False):
             pairs = pairs[:1]
-        top_n = int(self.cfg.get("return_legs_for_top_n", 2))
+        primary = pairs[0] if pairs else None
+        top_primary = int(self.cfg.get("return_legs_primary", 3))
+        top_flex = int(self.cfg.get("return_legs_flex", 1))
+        workers = max(1, int(self.cfg.get("concurrency", 4)))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            fetched = list(pool.map(lambda p: self._search_pair(p, top_primary if p == primary else top_flex), pairs))
+
         succeeded = 0
-        for out_date, ret_date in pairs:
+        for (out_date, ret_date), r in zip(pairs, fetched):
             label = f"serpapi_{out_date:%m%d}_{ret_date:%m%d}"
-            params = self._params(out_date, ret_date)
-            res.calls += 1
-            try:
-                first = self._get(params)
-            except HttpError as exc:
-                res.errors.append(f"{out_date:%d %b}–{ret_date:%d %b}: {exc}")
-                res.raw_files.append(self.save_raw(label + "_error", {"request": params, "error": str(exc)}))
+            res.calls += 1 + len(r["returns"])
+            if r["error"]:
+                res.errors.append(f"{out_date:%d %b}–{ret_date:%d %b}: {r['error']}")
+                res.raw_files.append(self.save_raw(label + "_error", {"request": r["params"], "error": r["error"]}))
                 continue
-            res.raw_files.append(self.save_raw(label + "_outbound", {"request": params, "response": first}))
+            first = r["first"]
+            res.raw_files.append(self.save_raw(label + "_outbound", {"request": r["params"], "response": first}))
             succeeded += 1
-            outs = sorted((o for o in options(first) if o.get("price") is not None and o.get("departure_token")),
-                          key=lambda o: o["price"])[:top_n]
-            for i, out_opt in enumerate(outs):
+            if (out_date, ret_date) == primary and first.get("price_insights"):
+                res.extras["price_insights"] = first["price_insights"]
+            if not options(first):
+                res.errors.append(f"{out_date:%d %b}–{ret_date:%d %b}: Google returned no flights")
+            for i, (out_opt, second, err) in enumerate(r["returns"], 1):
+                if err:
+                    res.errors.append(f"{out_date:%d %b}–{ret_date:%d %b} return legs: {err}")
+                    continue
+                res.raw_files.append(self.save_raw(f"{label}_return{i}", {"request": r["params"], "response": second}))
                 out_leg = parse_leg(out_opt)
                 if out_leg is None:
                     continue
-                res.calls += 1
-                try:
-                    second = self._get({**params, "departure_token": out_opt["departure_token"]})
-                except HttpError as exc:
-                    res.errors.append(f"{out_date:%d %b}–{ret_date:%d %b} return legs: {exc}")
-                    continue
-                res.raw_files.append(self.save_raw(f"{label}_return{i + 1}",
-                                                   {"request": params, "response": second}))
-                link = (second.get("search_metadata") or {}).get("google_flights_url")
+                link = (second.get("search_metadata") or {}).get("google_flights_url") or \
+                    (first.get("search_metadata") or {}).get("google_flights_url")
                 for ret_opt in options(second):
                     ret_leg = parse_leg(ret_opt)
                     if ret_leg is None or ret_opt.get("price") is None:
@@ -140,5 +176,8 @@ class SerpApiProvider(FareProvider):
                         single_ticket=not (is_self_transfer(out_opt) or is_self_transfer(ret_opt)),
                         booking_link=link,
                     ))
+        usage = self.account()
+        if usage:
+            res.extras["account"] = usage
         res.ok = succeeded > 0
         return res

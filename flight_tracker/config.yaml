@@ -16,6 +16,10 @@ trip:
   #         + primary outbound with each flex return  (7 searches/provider)
   # grid  = every outbound x every return            (16 searches/provider)
   flex_mode: cross
+  # Flex dates are searched once a day, on the first run at or after this local hour
+  # (the 17:00 cron). The other runs check the primary dates only, which keeps cost down.
+  # Set to 0 to search flex dates on every run.
+  flex_from_hour: 15
 
 scoring:
   dollars_per_hour: 50          # penalty per hour over the threshold, per direction
@@ -43,22 +47,24 @@ jev:
   min_days_before_upgrade: 3
 
 providers:
+  # Ignav – primary source.
   ignav:
     enabled: true
     base_url: https://ignav.com/api
     endpoint: /fares/round-trip
     timeout_s: 60
-    concurrency: 4              # parallel requests (date pairs)
+    concurrency: 4              # date pairs searched in parallel
     # extra_body: {max_stops: 3}  # merged into every request body
+  # Google Flights via SerpApi – second source; skipped if SERPAPI_KEY is not set.
   serpapi:
-    enabled: true               # silently skipped if SERPAPI_KEY is not set
+    enabled: true
     base_url: https://serpapi.com/search.json
     timeout_s: 60
-    # SerpApi returns outbound options first; each return leg needs one extra call.
-    # Fetch return legs only for the cheapest N outbound options per date pair.
-    return_legs_for_top_n: 2
-    # Only search SerpApi on the primary date pair (flex dates stay on Ignav) to keep cost down.
-    primary_dates_only: true
+    concurrency: 4
+    # Google returns outbound options first; each return leg needs one more call.
+    return_legs_primary: 3      # cheapest N outbound options expanded on 21 Dec / 8 Jan
+    return_legs_flex: 1         # ...and on each flex date pair
+    primary_dates_only: false   # true = Google only checks 21 Dec / 8 Jan (cheaper)
 
 http:
   retries: 3                    # attempts after the first one
