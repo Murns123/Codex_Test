@@ -138,7 +138,8 @@ This deploys as its **own Vercel project**, separate from the Next.js paper trad
 
 1. Vercel → **Add New Project** → import this repo → set **Root Directory** to `flight_tracker`. Framework
    preset: *Other*.
-2. **Storage** → add a Postgres database (Neon via the Marketplace) and connect it to the project. This sets
+2. **Storage** → add a Postgres database (Neon via the Marketplace, region **Sydney** to sit next to the
+   functions, which are pinned to `syd1`) and connect it to the project. This sets
    `DATABASE_URL` / `POSTGRES_URL`. Tables are created on the first request.
 3. **Settings → Environment Variables:**
    - `IGNAV_API_KEY`
