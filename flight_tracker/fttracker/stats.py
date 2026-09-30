@@ -58,6 +58,7 @@ def option_summary(it: Itinerary) -> dict[str, Any]:
         "via_back": it.inbound.airports[1:-1],
         "single_ticket": it.single_ticket,
         "too_long": it.too_long,
+        "price_note": next((n for n in it.notes if n.startswith("converted")), None),
     }
 
 

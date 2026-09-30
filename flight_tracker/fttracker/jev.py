@@ -79,7 +79,11 @@ QUESTIONS: dict[str, dict[str, Any]] = {
     "urgency": {
         "type": "score",
         "instructions": "How urgent is it to book? 1 = no rush, 5 = book immediately.",
-        "legend": {"1": "no rush", "2": "low", "3": "moderate", "4": "high", "5": "book immediately"},
+        "criteria": {"1": "no rush – prices are fine or falling and there is plenty of time",
+                     "2": "low – worth watching a few more days",
+                     "3": "moderate – book within the week",
+                     "4": "high – prices or availability are turning against us",
+                     "5": "book immediately"},
     },
 }
 

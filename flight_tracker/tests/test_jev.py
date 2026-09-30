@@ -22,6 +22,8 @@ def test_buy_probability_missing_action():
 
 def test_every_question_is_well_formed():
     for key, q in jev.QUESTIONS.items():
+        if q["type"] == "score":
+            assert q["criteria"] and "legend" not in q, key
         assert q["type"] in ("noul", "choice", "score"), key
         assert q["instructions"], key
         if q["type"] == "choice":

@@ -54,6 +54,8 @@ providers:
     endpoint: /fares/round-trip
     timeout_s: 60
     concurrency: 4              # date pairs searched in parallel
+    send_currency: false        # Ignav rejects "currency"; USD quotes are converted at the ECB rate
+    fx_url: https://api.frankfurter.app/latest
     # extra_body: {max_stops: 3}  # merged into every request body
   # Google Flights via SerpApi – second source; skipped if SERPAPI_KEY is not set.
   serpapi:
@@ -62,9 +64,12 @@ providers:
     timeout_s: 60
     concurrency: 4
     # Google returns outbound options first; each return leg needs one more call.
-    return_legs_primary: 3      # cheapest N outbound options expanded on 21 Dec / 8 Jan
-    return_legs_flex: 1         # ...and on each flex date pair
-    primary_dates_only: false   # true = Google only checks 21 Dec / 8 Jan (cheaper)
+    # Sized for the SerpApi Free plan (250 searches/month): primary dates only, 1 return-leg
+    # expansion = 2 searches per run, 6 per day, ~186 to 31 Oct. Ignav covers the flex dates.
+    return_legs_primary: 1      # cheapest N outbound options expanded on 21 Dec / 8 Jan
+    return_legs_flex: 1         # ...and on each flex date pair (if primary_dates_only is false)
+    primary_dates_only: true
+    reserve_searches: 10        # skip Google rather than go below this many searches left
 
 http:
   retries: 3                    # attempts after the first one

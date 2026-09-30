@@ -132,6 +132,19 @@ class SerpApiProvider(FareProvider):
         primary = pairs[0] if pairs else None
         top_primary = int(self.cfg.get("return_legs_primary", 3))
         top_flex = int(self.cfg.get("return_legs_flex", 1))
+
+        # Budget guard: never run the plan dry – skip Google (and say so) below the reserve.
+        usage = self.account()
+        if usage:
+            res.extras["account"] = usage
+            left = usage.get("total_searches_left", usage.get("plan_searches_left"))
+            needed = sum(1 + (top_primary if p == primary else top_flex) for p in pairs)
+            reserve = int(self.cfg.get("reserve_searches", 10))
+            if isinstance(left, int) and left - needed < reserve:
+                res.skipped = True
+                res.errors.append(f"skipped to protect the SerpApi allowance: {left} searches left, this run "
+                                  f"needs {needed}, reserve {reserve}")
+                return res
         workers = max(1, int(self.cfg.get("concurrency", 4)))
         with ThreadPoolExecutor(max_workers=workers) as pool:
             fetched = list(pool.map(lambda p: self._search_pair(p, top_primary if p == primary else top_flex), pairs))
@@ -176,8 +189,5 @@ class SerpApiProvider(FareProvider):
                         single_ticket=not (is_self_transfer(out_opt) or is_self_transfer(ret_opt)),
                         booking_link=link,
                     ))
-        usage = self.account()
-        if usage:
-            res.extras["account"] = usage
         res.ok = succeeded > 0
         return res

@@ -12,6 +12,7 @@ against this parser before relying on it (see README).
 from __future__ import annotations
 
 import datetime as dt
+import json
 import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -72,8 +73,19 @@ def _iso_diff_minutes(start: str | None, end: str | None) -> int | None:
     return int((b - a).total_seconds() // 60)
 
 
+def _local_diff_minutes(start: str | None, end: str | None) -> int | None:
+    try:
+        a, b = dt.datetime.fromisoformat(str(start)), dt.datetime.fromisoformat(str(end))
+    except (TypeError, ValueError):
+        return None
+    if (a.tzinfo is None) != (b.tzinfo is None):
+        return None
+    mins = int((b - a).total_seconds() // 60)
+    return mins if mins >= 0 else None
+
+
 def _parse_segment(s: dict[str, Any]) -> Segment:
-    carrier = _code(_first(s, "marketing_carrier", "carrier", "airline", "marketing_airline",
+    carrier = _code(_first(s, "marketing_carrier_code", "marketing_carrier", "carrier", "airline", "marketing_airline",
                            "airline_code", "carrier_code"))
     fn = _first(s, "flight_number", "number", "flight")
     fn = str(fn) if fn is not None else None
@@ -85,10 +97,11 @@ def _parse_segment(s: dict[str, Any]) -> Segment:
         destination=_code(_first(s, "destination", "to", "arrival_airport", "arrival",
                                  "destination_airport")),
         carrier=carrier,
-        operating_carrier=_code(_first(s, "operating_carrier", "operating_airline")) or None,
+        operating_carrier=_code(_first(s, "operating_carrier_code", "operating_carrier", "operating_airline")) or None,
         flight_number=fn,
-        departure=_first(s, "departure_time", "departure_at", "departs_at", "departure_datetime"),
-        arrival=_first(s, "arrival_time", "arrival_at", "arrives_at", "arrival_datetime"),
+        departure=_first(s, "departure_time_local", "departure_time", "departure_at", "departs_at",
+                         "departure_datetime"),
+        arrival=_first(s, "arrival_time_local", "arrival_time", "arrival_at", "arrives_at", "arrival_datetime"),
         duration_min=_minutes(_first(s, "duration_minutes", "duration")),
     )
 
@@ -111,6 +124,9 @@ def _parse_leg(leg: dict[str, Any]) -> Leg | None:
     if not layovers and len(segments) > 1:
         for a, b in zip(segments, segments[1:]):
             gap = _iso_diff_minutes(a.arrival, b.departure)
+            if gap is None and a.destination == b.origin:
+                # both times are local to the same connecting airport, so they are comparable
+                gap = _local_diff_minutes(a.arrival, b.departure)
             if gap is not None:
                 layovers.append(gap)
     return Leg(segments=segments, duration_min=duration, layovers_min=layovers)
@@ -132,9 +148,15 @@ def _is_self_transfer(it: dict[str, Any]) -> bool:
 
 
 def parse_response(
-    payload: Any, out_date: dt.date, ret_date: dt.date, currency: str
+    payload: Any, out_date: dt.date, ret_date: dt.date, currency: str,
+    fx: dict[str, Any] | None = None,
 ) -> tuple[list[Itinerary], list[str]]:
-    """Normalise an Ignav round-trip response. Returns (itineraries, problems)."""
+    """Normalise an Ignav round-trip response. Returns (itineraries, problems).
+
+    Prices quoted in another currency are converted only when `fx` supplies a published
+    rate for it ({"rates": {"USD": 1.52}, "date": ..., "source": ...}); otherwise they are
+    skipped, never guessed."""
+    rates = (fx or {}).get("rates", {})
     problems: list[str] = []
     items = payload if isinstance(payload, list) else _first(
         payload, "itineraries", "results", "data", "fares", "offers", default=[])
@@ -156,9 +178,13 @@ def parse_response(
         except (TypeError, ValueError):
             dropped += 1
             continue
+        note = None
         if cur != currency.upper():
-            problems.append(f"skipped a fare quoted in {cur} (expected {currency})")
-            continue
+            if cur not in rates:
+                problems.append(f"skipped a fare quoted in {cur} (no {cur}->{currency} rate available)")
+                continue
+            note = f"converted from {cur} {price:,.0f} at {rates[cur]} ({fx.get('source')}, {fx.get('date')})"
+            price = round(price * float(rates[cur]), 2)
         legs_raw = _first(it, "legs", "slices", "journeys", "bounds") or []
         if not legs_raw and ("outbound" in it or "inbound" in it or "return" in it):
             legs_raw = [it.get("outbound"), _first(it, "inbound", "return")]
@@ -176,6 +202,7 @@ def parse_response(
             inbound=legs[1],   # type: ignore[arg-type]
             single_ticket=not _is_self_transfer(it),
             booking_link=_first(it, "booking_url", "booking_link", "deep_link", "url"),
+            notes=[note] if note else [],
         ))
     if dropped:
         problems.append(f"{dropped} itinerar{'y' if dropped == 1 else 'ies'} dropped "
@@ -202,10 +229,32 @@ class IgnavProvider(FareProvider):
             "return_date": ret_date.isoformat(),
             "adults": t.adults,
             "cabin_class": CABIN.get(t.cabin, t.cabin),
-            "currency": t.currency,
         }
+        # Ignav rejects a currency field (400 invalid_request_body, field "currency");
+        # prices come back in USD and are converted at a published rate.
+        if self.cfg.get("send_currency"):
+            body["currency"] = t.currency
         body.update(self.cfg.get("extra_body") or {})
         return body
+
+    def _fx(self, payload: Any, res: ProviderResult) -> dict[str, Any] | None:
+        """Published FX rates for any non-AUD currency in the payload, fetched once per run."""
+        target = self.settings.trip.currency.upper()
+        found = set(re.findall(r'"currency":\s*"([A-Za-z]{3})"', json.dumps(payload))) - {target}
+        fx = res.extras.setdefault("fx", {"rates": {}, "source": "ECB reference rate via frankfurter.app"})
+        for cur in (c.upper() for c in found):
+            if cur in fx["rates"] or cur in fx.get("failed", []):
+                continue
+            url = self.cfg.get("fx_url", "https://api.frankfurter.app/latest")
+            try:
+                data = request_json("GET", url, params={"from": cur, "to": target},
+                                    **{**self.http_kwargs, "timeout_s": 20})
+                fx["rates"][cur] = float(data["rates"][target])
+                fx["date"] = data.get("date")
+            except (HttpError, KeyError, TypeError, ValueError) as exc:
+                fx.setdefault("failed", []).append(cur)
+                res.errors.append(f"no {cur}->{target} exchange rate ({exc}); {cur} fares left out")
+        return fx
 
     def search(self, pairs: list[tuple[dt.date, dt.date]]) -> ProviderResult:
         res = ProviderResult(provider=self.name, ok=False)
@@ -237,7 +286,8 @@ class IgnavProvider(FareProvider):
                 res.raw_files.append(self.save_raw(label + "_error", {"request": body, "error": err}))
                 continue
             res.raw_files.append(self.save_raw(label, {"request": body, "response": payload}))
-            its, problems = parse_response(payload, out_date, ret_date, self.settings.trip.currency)
+            its, problems = parse_response(payload, out_date, ret_date, self.settings.trip.currency,
+                                           self._fx(payload, res))
             res.errors += [f"{out_date:%d %b}–{ret_date:%d %b}: {p}" for p in problems]
             res.itineraries += its
             succeeded += 1

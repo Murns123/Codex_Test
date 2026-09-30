@@ -81,6 +81,8 @@ def to_text(r: dict[str, Any]) -> str:
                      f"{o['hours_out']}h out ({o['stops_out']} stops) / {o['hours_back']}h back ({o['stops_back']} stops)  "
                      f"longest layover {o['longest_layover_h']}h  value {o['value_score']:,.0f}"
                      f"{'  TOO LONG' if o['too_long'] else ''}{'' if o['single_ticket'] else '  SELF-TRANSFER'}")
+        if o.get("price_note"):
+            lines.append(f"     ({o['price_note']})")
         if o.get("booking_link"):
             lines.append(f"     {o['booking_link']}")
     lines.append("")
@@ -148,7 +150,9 @@ def _options_table(opts: list[dict[str, Any]]) -> str:
         if not o["single_ticket"]:
             flags.append("self-transfer")
         rows.append(
-            f"<tr><td>{i}</td><td class='num'>{_money(o['price_aud'])}</td><td>{_e(o['route'])} · {_e(o['route_label'])}</td>"
+            f"<tr><td>{i}</td><td class='num'>{_money(o['price_aud'])}"
+            + (f"<div class='muted' style='font-size:11px'>{_e(o['price_note'])}</div>" if o.get("price_note") else "")
+            + f"</td><td>{_e(o['route'])} · {_e(o['route_label'])}</td>"
             f"<td>{_e('/'.join(o['carriers']))}</td><td>{_e(o['dates'])}</td>"
             f"<td class='num'>{o['hours_out']}h · {o['stops_out']} stop(s)</td>"
             f"<td class='num'>{o['hours_back']}h · {o['stops_back']} stop(s)</td>"

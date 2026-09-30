@@ -106,3 +106,42 @@ def test_http_errors_never_carry_api_keys():
     with pytest.raises(HttpError) as e:
         request_json("GET", "http://x", session=Boom(), sleep=lambda _: None, retries=0)
     assert "SECRET123" not in str(e.value) and "api_key=***" in str(e.value)
+
+
+# Shape reported for the real Ignav API: price object in USD, outbound/inbound legs,
+# segments with marketing_carrier_code and *_time_local fields.
+REAL_SHAPE = {"itineraries": [{
+    "ignav_id": "abc",
+    "price": {"amount": 2500, "currency": "USD", "status": "verified"},
+    "booking_url": "https://example.invalid/book",
+    "outbound": {"carrier": "QF", "duration_minutes": 1400, "segments": [
+        {"marketing_carrier_code": "QF", "flight_number": "770", "departure_airport": "MEL",
+         "departure_time_local": "2026-12-21T06:00:00", "arrival_airport": "PER",
+         "arrival_time_local": "2026-12-21T07:35:00", "duration_minutes": 275},
+        {"marketing_carrier_code": "QF", "flight_number": "63", "departure_airport": "PER",
+         "departure_time_local": "2026-12-21T10:35:00", "arrival_airport": "JNB",
+         "arrival_time_local": "2026-12-21T17:20:00", "duration_minutes": 705}]},
+    "inbound": {"carrier": "QF", "duration_minutes": 1450, "segments": [
+        {"marketing_carrier_code": "QF", "flight_number": "64", "departure_airport": "JNB",
+         "departure_time_local": "2027-01-08T11:30:00", "arrival_airport": "PER",
+         "arrival_time_local": "2027-01-09T05:05:00", "duration_minutes": 695},
+        {"marketing_carrier_code": "QF", "flight_number": "771", "departure_airport": "PER",
+         "departure_time_local": "2027-01-09T09:05:00", "arrival_airport": "MEL",
+         "arrival_time_local": "2027-01-09T14:45:00", "duration_minutes": 220}]},
+}]}
+
+
+def test_ignav_real_shape_with_usd_conversion():
+    fx = {"rates": {"USD": 1.5}, "date": "2026-10-01", "source": "ECB"}
+    its, problems = parse_response(REAL_SHAPE, OUT, RET, "AUD", fx)
+    assert problems == [] and len(its) == 1
+    it = its[0]
+    assert it.price == 3750.0 and "converted from USD 2,500 at 1.5" in it.notes[0]
+    assert it.outbound.airports == ["MEL", "PER", "JNB"] and it.outbound.carriers == ["QF"]
+    assert it.outbound.layovers_min == [180] and it.inbound.layovers_min == [240]   # from same-airport local times
+    assert it.booking_link == "https://example.invalid/book"
+
+
+def test_ignav_usd_without_rate_is_left_out():
+    its, problems = parse_response(REAL_SHAPE, OUT, RET, "AUD", None)
+    assert its == [] and "no USD->AUD rate" in problems[0]
