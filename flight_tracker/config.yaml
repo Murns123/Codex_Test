@@ -65,9 +65,16 @@ http:
   backoff_base_s: 2             # 2s, 4s, 8s ...
   retry_on_status: [429, 500, 502, 503, 504]
 
+# Storage: when BLOB_READ_WRITE_TOKEN is set (Vercel, after connecting a Blob store) every
+# run, raw response and log line is stored as JSON in Vercel Blob. Otherwise (local CLI)
+# SQLite + files under data/ and logs/.
+storage:
+  blob:
+    base_url: https://vercel.com/api/blob
+    api_version: "11"
+    access: private             # must match the store's access mode
+    cache_max_age: 60           # seconds; index.json is overwritten each run
 
-# Local runs use SQLite + files. When DATABASE_URL is set (Vercel), everything –
-# runs, raw JSON, the daily log – goes to Postgres instead.
 paths:
   db: data/tracker.sqlite3
   raw_dir: data/raw

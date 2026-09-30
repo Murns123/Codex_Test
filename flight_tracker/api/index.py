@@ -16,7 +16,7 @@ class handler(BaseHTTPRequestHandler):
         try:
             storage = open_storage(settings())
         except Exception as exc:
-            send(self, 500, f"<h1>Database not reachable</h1><p>{exc}</p><p>Set DATABASE_URL.</p>")
+            send(self, 500, f"<h1>Storage not reachable</h1><p>{exc}</p><p>See /api/selftest.</p>")
             return
         try:
             html = to_html(storage.latest_report(), storage.recent_runs(30), storage.log_lines(60))

@@ -11,7 +11,8 @@ day on Vercel and tells you whether to **BUY** or **HOLD**.
 | Output | web dashboard at `/`, JSON at `/api/report`, run log at `/api/log` (no email) |
 | Schedule | 07:00, 12:00 and 17:00 Melbourne time (Vercel Cron) |
 
-Python 3.12. It uses Postgres on Vercel and SQLite for local CLI runs.
+Python 3.12. No database service is needed: on Vercel every run is stored as JSON in **Vercel Blob**
+(Vercel's built-in file storage). Local CLI runs use SQLite.
 
 ## How it works
 
@@ -138,9 +139,14 @@ This deploys as its **own Vercel project**, separate from the Next.js paper trad
 
 1. Vercel → **Add New Project** → import this repo → set **Root Directory** to `flight_tracker`. Framework
    preset: *Other*.
-2. **Storage** → add a Postgres database (Neon via the Marketplace, region **Sydney** to sit next to the
-   functions, which are pinned to `syd1`) and connect it to the project. This sets
-   `DATABASE_URL` / `POSTGRES_URL`. Tables are created on the first request.
+2. **Storage** → create a **Blob** store (private, region Sydney) and connect it to the project. This sets
+   `BLOB_READ_WRITE_TOKEN`. Layout inside the store:
+   - `runs/index.json`: one summary row per run (drives trend, baseline, log).
+   - `runs/<id>.json`: the full report and itineraries for that run.
+   - `raw/<date>/<id>_<label>.json`: every provider and JEV response, for audit.
+
+   If `index.json` is ever lost, it is rebuilt from the per-run files, so the baseline survives.
+   `/api/selftest` checks the connection (put/list/get round trip) and shows which env vars are set.
 3. **Settings → Environment Variables:**
    - `IGNAV_API_KEY`
    - `CRON_SECRET`: any long random string. Vercel sends it to the cron endpoint, and requests without it
@@ -170,7 +176,7 @@ each can fire any time within its hour. Check the current limits at
 | Ignav | 7 (`flex_mode: cross`) or 16 (`grid`) | 21 / 48 | ~650 / ~1,490 |
 | SerpApi (optional) | 3 (1 search + 2 return-leg expansions, primary dates only) | 9 | ~280 |
 | JEV (optional) | 1 (~8–15k input tokens: stats + top 10 options) | 3 | ~93 |
-| Vercel + Neon | 1 function run of up to ~60s, a few KB of rows plus raw JSON | – | free tiers normally cover this |
+| Vercel + Blob | 1 function run of up to ~60s; ~10–20 small JSON writes | ~50 | Hobby free tier normally covers this |
 
 Cost per run = calls × your plan's per-call price. Check the current prices:
 
@@ -190,7 +196,7 @@ flight_tracker/
   tracker.py              CLI: run / report / probe
   config.yaml             trip, scoring, thresholds, providers, JEV
   vercel.json             functions, rewrite / -> /api/index, 3 crons
-  api/                    Vercel functions: cron, index (dashboard), report (JSON), log
+  api/                    Vercel functions: cron, index (dashboard), report (JSON), log, selftest
   fttracker/
     providers/            pluggable: base.FareProvider, ignav, serpapi, fixture
     classify.py           route A–E
@@ -198,7 +204,8 @@ flight_tracker/
     decision.py           BUY/HOLD rules + JEV upgrade gate
     stats.py              statistics for dashboard + JEV
     jev.py                JEV questions and client
-    storage.py            SQLite / Postgres
+    storage.py            SQLite (local) / JSON documents (Vercel Blob)
+    blobstore.py          Vercel Blob HTTP client + local-directory store
     report.py             text + HTML dashboard
     runner.py             one run end to end
   tests/                  58 tests incl. scoring, decision rules, classification, parsers, retries

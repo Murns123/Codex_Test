@@ -17,14 +17,26 @@ from .providers import PROVIDERS
 from .providers.fixture import FixtureProvider
 from .scoring import best_single_ticket, score_all
 from .stats import calendar_stats, history_stats, option_summary, today_stats
-from .storage import Storage
+from .blobstore import VercelBlobStore
+from .storage import DocStorage, SqliteStorage
+
+Storage = SqliteStorage | DocStorage
 
 log = logging.getLogger(__name__)
 
 
 def open_storage(settings: Settings, dry_run: bool = False) -> Storage:
-    return Storage(database_url=settings.env.get("DATABASE_URL", ""),
-                   sqlite_path=settings.paths.get("db"), dry_run=dry_run)
+    token = settings.env.get("BLOB_READ_WRITE_TOKEN")
+    if token:
+        b = settings.storage.get("blob", {})
+        store = VercelBlobStore(
+            token, base_url=b.get("base_url", "https://vercel.com/api/blob"),
+            api_version=str(b.get("api_version", "11")), access=b.get("access", "private"),
+            cache_max_age=int(b.get("cache_max_age", 60)),
+            http_kwargs={"retries": int(settings.http.get("retries", 3)),
+                         "backoff_base_s": float(settings.http.get("backoff_base_s", 2)), "timeout_s": 30})
+        return DocStorage(store, dry_run=dry_run)
+    return SqliteStorage(sqlite_path=settings.paths.get("db"), dry_run=dry_run)
 
 
 def _dedupe(its: list[Itinerary]) -> list[Itinerary]:

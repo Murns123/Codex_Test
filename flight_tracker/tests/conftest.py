@@ -27,7 +27,7 @@ def itin(price: float, out_h: float = 20, back_h: float = 20, single: bool = Tru
 
 @pytest.fixture
 def settings(tmp_path, monkeypatch):
-    for k in ("IGNAV_API_KEY", "SERPAPI_KEY", "JEV_API_KEY", "DATABASE_URL", "POSTGRES_URL", "VERCEL"):
+    for k in ("IGNAV_API_KEY", "SERPAPI_KEY", "JEV_API_KEY", "BLOB_READ_WRITE_TOKEN", "VERCEL"):
         monkeypatch.setenv(k, "")
     from fttracker.config import load_settings
     s = load_settings(ROOT / "config.yaml", env_path=tmp_path / "none.env")

@@ -76,6 +76,7 @@ class Settings:
     providers: dict[str, dict[str, Any]]
     http: dict[str, Any]
     jev: dict[str, Any]
+    storage: dict[str, Any]
     paths: dict[str, Path]
     timezone: str
     env: dict[str, str] = field(default_factory=dict)
@@ -110,11 +111,9 @@ def load_settings(config_path: Path | None = None, env_path: Path | None = None)
     decision = DecisionConfig(**d)
 
     paths = {k: (ROOT / v) for k, v in raw.get("paths", {}).items()}
-    env_keys = ["IGNAV_API_KEY", "SERPAPI_KEY", "JEV_API_KEY", "JEV_MODEL", "DATABASE_URL",
+    env_keys = ["IGNAV_API_KEY", "SERPAPI_KEY", "JEV_API_KEY", "JEV_MODEL", "BLOB_READ_WRITE_TOKEN",
                 "CRON_SECRET", "VERCEL"]
     env = {k: os.environ.get(k, "").strip() for k in env_keys}
-    # Neon / Vercel Postgres integrations may set POSTGRES_URL instead of DATABASE_URL
-    env["DATABASE_URL"] = env["DATABASE_URL"] or os.environ.get("POSTGRES_URL", "").strip()
     return Settings(
         trip=trip,
         scoring=scoring,
@@ -122,6 +121,7 @@ def load_settings(config_path: Path | None = None, env_path: Path | None = None)
         providers=raw.get("providers", {}),
         http=raw.get("http", {}),
         jev=raw.get("jev", {}),
+        storage=raw.get("storage", {}),
         paths=paths,
         timezone=raw.get("timezone", "Australia/Melbourne"),
         env=env,

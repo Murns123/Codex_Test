@@ -11,7 +11,9 @@ log = logging.getLogger(__name__)
 
 
 class HttpError(RuntimeError):
-    pass
+    def __init__(self, message: str, status: int | None = None):
+        super().__init__(message)
+        self.status = status
 
 
 def request_json(
@@ -33,13 +35,15 @@ def request_json(
     """
     http = session or requests
     last_err = ""
+    last_status: int | None = None
     for attempt in range(retries + 1):
         try:
             resp = http.request(method, url, timeout=timeout_s, **kwargs)
             if resp.status_code in retry_on_status:
+                last_status = resp.status_code
                 last_err = f"HTTP {resp.status_code}: {resp.text[:300]}"
             elif resp.status_code >= 400:
-                raise HttpError(f"HTTP {resp.status_code}: {resp.text[:300]}")
+                raise HttpError(f"HTTP {resp.status_code}: {resp.text[:300]}", resp.status_code)
             else:
                 try:
                     return resp.json()
@@ -52,4 +56,4 @@ def request_json(
             log.warning("%s %s failed (%s); retry %d/%d in %.0fs",
                         method, url, last_err, attempt + 1, retries, wait)
             sleep(wait)
-    raise HttpError(f"gave up after {retries + 1} attempts – {last_err}")
+    raise HttpError(f"gave up after {retries + 1} attempts – {last_err}", last_status)
