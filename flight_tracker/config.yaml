@@ -80,6 +80,9 @@ storage:
     api_version: "11"
     access: private             # must match the store's access mode
     cache_max_age: 60           # seconds; index.json is overwritten each run
+    # Stores connected with OIDC have BLOB_STORE_ID instead of a read-write token; the
+    # per-request OIDC token is then sent with the store id in this header.
+    store_id_header: x-vercel-blob-store-id
 
 paths:
   db: data/tracker.sqlite3

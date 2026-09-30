@@ -55,11 +55,39 @@ def probe_ignav(s):
     }
 
 
+def blob_diag(s):
+    """Try the plausible ways of authenticating a Blob write and report each API answer."""
+    import requests
+    token = s.env.get("BLOB_READ_WRITE_TOKEN") or s.env.get("VERCEL_OIDC_TOKEN")
+    store = s.env.get("BLOB_STORE_ID", "")
+    if not token:
+        return {"error": "no BLOB_READ_WRITE_TOKEN and no OIDC token on this request"}
+    base = s.storage.get("blob", {}).get("base_url", "https://vercel.com/api/blob")
+    common = {"authorization": f"Bearer {token}", "x-api-version": "11", "x-vercel-blob-access": "private",
+              "x-add-random-suffix": "0", "x-allow-overwrite": "1", "x-content-type": "application/json"}
+    variants = {
+        "no_store_header": ({}, ""),
+        "x-vercel-blob-store-id": ({"x-vercel-blob-store-id": store}, ""),
+        "x-store-id": ({"x-store-id": store}, ""),
+        "query_storeId": ({}, f"&storeId={store}"),
+    }
+    out = {"auth": "read_write_token" if s.env.get("BLOB_READ_WRITE_TOKEN") else "oidc", "store_id_set": bool(store)}
+    for name, (extra, q) in variants.items():
+        try:
+            r = requests.put(f"{base}/?pathname=selftest/diag-{name}.json{q}", data=b"{}",
+                             headers={**common, **extra}, timeout=20)
+            out[name] = {"status": r.status_code, "body": r.text[:200]}
+        except Exception as exc:
+            out[name] = {"error": f"{type(exc).__name__}: {exc}"[:200]}
+    return out
+
+
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        s = settings()
+        s = settings(self.headers)
         q = parse_qs(urlparse(self.path).query)
         out = {"env_present": {k: bool(v) for k, v in s.env.items() if k != "VERCEL"}, "checks": {}}
+        out["oidc_header_present"] = bool(self.headers.get("x-vercel-oidc-token"))
         ok = True
         try:
             storage = open_storage(s)
@@ -80,6 +108,9 @@ class handler(BaseHTTPRequestHandler):
         except Exception as exc:
             out["error"] = f"{type(exc).__name__}: {exc}"
             ok = False
+
+        if q.get("blobdiag") == ["1"]:
+            out["blob_diag"] = blob_diag(s)
 
         if q.get("probe") == ["ignav"]:
             secret = os.environ.get("CRON_SECRET", "")

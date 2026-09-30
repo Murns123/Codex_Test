@@ -12,7 +12,7 @@ from fttracker.runner import open_storage
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        storage = open_storage(settings())
+        storage = open_storage(settings(self.headers))
         try:
             lines = storage.log_lines(1000)
         finally:

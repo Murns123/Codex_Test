@@ -114,8 +114,10 @@ def load_settings(config_path: Path | None = None, env_path: Path | None = None)
 
     paths = {k: (ROOT / v) for k, v in raw.get("paths", {}).items()}
     env_keys = ["IGNAV_API_KEY", "SERPAPI_KEY", "JEV_API_KEY", "JEV_MODEL", "BLOB_READ_WRITE_TOKEN",
-                "CRON_SECRET", "VERCEL"]
+                "BLOB_STORE_ID", "VERCEL_OIDC_TOKEN", "CRON_SECRET", "VERCEL"]
     env = {k: os.environ.get(k, "").strip() for k in env_keys}
+    # tolerate the common misspelling of the SerpApi variable name
+    env["SERPAPI_KEY"] = env["SERPAPI_KEY"] or os.environ.get("SERAPI_KEY", "").strip()
     return Settings(
         trip=trip,
         scoring=scoring,

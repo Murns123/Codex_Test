@@ -27,18 +27,25 @@ log = logging.getLogger(__name__)
 
 def open_storage(settings: Settings, dry_run: bool = False) -> Storage:
     token = settings.env.get("BLOB_READ_WRITE_TOKEN")
+    store_id = ""
+    if not token and settings.env.get("BLOB_STORE_ID") and settings.env.get("VERCEL_OIDC_TOKEN"):
+        token, store_id = settings.env["VERCEL_OIDC_TOKEN"], settings.env["BLOB_STORE_ID"]
     if token:
         b = settings.storage.get("blob", {})
         store = VercelBlobStore(
-            token, base_url=b.get("base_url", "https://vercel.com/api/blob"),
+            token, store_id=store_id, store_id_header=b.get("store_id_header", "x-vercel-blob-store-id"),
+            base_url=b.get("base_url", "https://vercel.com/api/blob"),
             api_version=str(b.get("api_version", "11")), access=b.get("access", "private"),
             cache_max_age=int(b.get("cache_max_age", 60)),
             http_kwargs={"retries": int(settings.http.get("retries", 3)),
                          "backoff_base_s": float(settings.http.get("backoff_base_s", 2)), "timeout_s": 30})
         return DocStorage(store, dry_run=dry_run)
     if settings.env.get("VERCEL"):
+        if settings.env.get("BLOB_STORE_ID"):
+            raise RuntimeError("Blob store is connected (BLOB_STORE_ID) but this request carried no OIDC token – "
+                               "enable OIDC in Project Settings -> Security, or add BLOB_READ_WRITE_TOKEN.")
         raise RuntimeError("No Blob store connected: in Vercel, Storage -> Create -> Blob (private), connect it "
-                           "to this project, then redeploy. That sets BLOB_READ_WRITE_TOKEN.")
+                           "to this project, then redeploy.")
     return SqliteStorage(sqlite_path=settings.paths.get("db"), dry_run=dry_run)
 
 

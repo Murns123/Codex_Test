@@ -14,7 +14,7 @@ from fttracker.runner import open_storage
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
-            storage = open_storage(settings())
+            storage = open_storage(settings(self.headers))
         except Exception as exc:
             send(self, 500, f"<h1>Storage not reachable</h1><p>{exc}</p><p>See /api/selftest.</p>")
             return

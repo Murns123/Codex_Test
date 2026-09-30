@@ -12,8 +12,13 @@ from .config import load_settings
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
 
-def settings():
-    return load_settings()
+def settings(headers: Any = None):
+    """Load settings; on Vercel also pick up the per-request OIDC token (used for Blob)."""
+    s = load_settings()
+    token = (headers.get("x-vercel-oidc-token") if headers is not None else None) or ""
+    if token:
+        s.env["VERCEL_OIDC_TOKEN"] = token
+    return s
 
 
 def authorised(headers: Any) -> bool:

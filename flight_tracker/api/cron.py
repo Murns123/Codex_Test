@@ -16,7 +16,7 @@ class handler(BaseHTTPRequestHandler):
             send(self, 401, {"ok": False, "error": "unauthorised"})
             return
         try:
-            report = run(settings())
+            report = run(settings(self.headers))
         except Exception as exc:  # surface the failure in Vercel logs and to the caller
             import logging
             logging.exception("run failed")

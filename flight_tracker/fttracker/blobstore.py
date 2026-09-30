@@ -48,8 +48,13 @@ class LocalDirStore:
 class VercelBlobStore:
     def __init__(self, token: str, *, base_url: str = "https://vercel.com/api/blob",
                  api_version: str = "11", access: str = "private", cache_max_age: int = 60,
+                 store_id: str = "", store_id_header: str = "x-vercel-blob-store-id",
                  http_kwargs: dict[str, Any] | None = None, session: requests.Session | None = None):
+        """token: a BLOB_READ_WRITE_TOKEN, or a Vercel OIDC token together with store_id
+        (stores connected with OIDC have BLOB_STORE_ID but no read-write token)."""
         self.token = token
+        self.store_id = store_id
+        self.store_id_header = store_id_header
         self.base = base_url.rstrip("/")
         self.api_version = str(api_version)
         self.access = access
@@ -59,7 +64,10 @@ class VercelBlobStore:
         self._urls: dict[str, str] = {}
 
     def _headers(self) -> dict[str, str]:
-        return {"authorization": f"Bearer {self.token}", "x-api-version": self.api_version}
+        h = {"authorization": f"Bearer {self.token}", "x-api-version": self.api_version}
+        if self.store_id and self.store_id_header:
+            h[self.store_id_header] = self.store_id
+        return h
 
     def put_json(self, path: str, obj: Any) -> None:
         headers = {
