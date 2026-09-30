@@ -1,0 +1,6 @@
+tests/
+data/
+logs/
+.venv/
+tracker.py
+requirements-dev.txt

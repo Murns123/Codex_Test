@@ -1,0 +1,276 @@
+"""One tracking run: search -> classify -> score -> decide -> (JEV) -> store -> report."""
+from __future__ import annotations
+
+import datetime as dt
+import json
+import logging
+from pathlib import Path
+from typing import Any
+from zoneinfo import ZoneInfo
+
+from . import jev as jevmod
+from .classify import classify
+from .config import Settings
+from .decision import Decision, Point, apply_jev, decide, pct_change
+from .models import Itinerary, ProviderResult
+from .providers import PROVIDERS
+from .providers.fixture import FixtureProvider
+from .scoring import best_single_ticket, score_all
+from .stats import calendar_stats, history_stats, option_summary, today_stats
+from .storage import Storage
+
+log = logging.getLogger(__name__)
+
+
+def open_storage(settings: Settings, dry_run: bool = False) -> Storage:
+    return Storage(database_url=settings.env.get("DATABASE_URL", ""),
+                   sqlite_path=settings.paths.get("db"), dry_run=dry_run)
+
+
+def _dedupe(its: list[Itinerary]) -> list[Itinerary]:
+    best: dict[str, Itinerary] = {}
+    for it in its:
+        k = it.key()
+        if k not in best or it.price < best[k].price:
+            best[k] = it
+    return list(best.values())
+
+
+def _history(storage: Storage, run_id: int, today: dt.date, basis: str) -> tuple[list[Point], list[float]]:
+    rows = storage.scored_runs(exclude_run_id=run_id)
+    runs_today = [r["best_value"] for r in rows if r["run_date"] == today.isoformat()]
+    if basis == "run":
+        return [Point(dt.date.fromisoformat(r["run_date"]), r["best_value"], r["best_price"]) for r in rows], runs_today
+    closes: dict[str, dict[str, Any]] = {}
+    for r in rows:                     # rows are oldest first, so the last one per date wins
+        if r["run_date"] != today.isoformat():
+            closes[r["run_date"]] = r
+    pts = [Point(dt.date.fromisoformat(d), r["best_value"], r["best_price"]) for d, r in sorted(closes.items())]
+    return pts, runs_today
+
+
+def suggestions(best: Itinerary | None, its: list[Itinerary], tstats: dict[str, Any],
+                cal: dict[str, Any], jev_answers: dict[str, Any]) -> list[str]:
+    out: list[str] = []
+    if best is None:
+        return ["No usable fares today – check Qantas, SAA and Emirates directly before relying on this tracker."]
+    fs = tstats.get("flex_saving")
+    if fs and fs["price_saving"] and fs["price_saving"] >= 100:
+        out.append(f"Flying {fs['dates']} instead is AUD {fs['price_saving']:,.0f} cheaper – worth it if your leave can move.")
+    st_cheapest = tstats.get("self_transfer_cheapest")
+    if st_cheapest is not None and best.price - st_cheapest >= 300:
+        out.append(f"A self-transfer combo is AUD {best.price - st_cheapest:,.0f} cheaper, but over Christmas a missed "
+                   "connection on separate tickets is your problem, not the airline's – I'd stick with one ticket.")
+    if best.longest_layover_min >= 8 * 60:
+        out.append(f"The top pick has a {best.longest_layover_min / 60:.0f}h layover – check whether you'd need to "
+                   "leave the airport or re-check bags, and whether a lounge day pass is worth it.")
+    alt = [i for i in its if i.single_ticket and not i.too_long and i.route != best.route
+           and i.price - best.price <= 150 and (i.outbound.hours + i.inbound.hours) <
+           (best.outbound.hours + best.inbound.hours) - 3]
+    if alt:
+        a = min(alt, key=lambda i: i.price)
+        out.append(f"Route {a.route} is only AUD {a.price - best.price:,.0f} more and about "
+                   f"{(best.outbound.hours + best.inbound.hours) - (a.outbound.hours + a.inbound.hours):.0f}h "
+                   "quicker in total – worth a look.")
+    risk = jev_answers.get("connection_risk_high")
+    if isinstance(risk, (int, float)) and risk >= 0.6:
+        out.append("JEV flags the top option's connections as risky – check minimum connection times, "
+                   "especially the regional hop into East London.")
+    if 0 <= cal["days_to_book_by"] <= 5:
+        out.append(f"Book-by date is {cal['days_to_book_by']} day(s) away – have passport details ready.")
+    out.append("When booking, make sure the East London leg is on the same booking reference, so a delay "
+               "into Johannesburg is the airline's problem to fix.")
+    return out[:3]
+
+
+def run(settings: Settings, *, now: dt.datetime | None = None, dry_run: bool = False,
+        fixtures: Path | None = None, storage: Storage | None = None) -> dict[str, Any]:
+    tz = ZoneInfo(settings.timezone)
+    now = (now or dt.datetime.now(tz)).astimezone(tz)
+    today = now.date()
+    own_storage = storage is None
+    storage = storage or open_storage(settings, dry_run=dry_run)
+    on_vercel = bool(settings.env.get("VERCEL"))
+    try:
+        return _run(settings, storage, now, today, dry_run, fixtures, on_vercel)
+    finally:
+        if own_storage:
+            storage.close()
+
+
+def _run(settings: Settings, storage: Storage, now: dt.datetime, today: dt.date, dry_run: bool,
+         fixtures: Path | None, on_vercel: bool) -> dict[str, Any]:
+    dcfg = settings.decision
+    if today > dcfg.hard_stop:
+        d = decide(today, None, [], dcfg)
+        log.info("Past hard stop – no searches.")
+        return {"run_at": now.isoformat(), "status": "stopped", "decision": d.__dict__, "day": None}
+
+    run_id = storage.start_run(now)
+    raw_dir = settings.paths.get("raw_dir", Path("data/raw")) / today.isoformat()
+
+    def save_raw(label: str, payload: Any) -> str:
+        storage.save_raw(run_id, label, payload)
+        if on_vercel or dry_run:
+            return f"db:raw_responses/{run_id}/{label}"
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        path = raw_dir / f"run{run_id}_{now:%H%M}_{label}.json"
+        path.write_text(json.dumps(payload, indent=2, default=str))
+        return str(path)
+
+    pairs = settings.trip.date_pairs()
+    results: list[ProviderResult] = []
+    if fixtures:
+        results.append(FixtureProvider(settings, save_raw, fixtures).search(pairs))
+    else:
+        for cls in PROVIDERS:
+            p = cls(settings, save_raw)
+            usable, why = p.is_configured()
+            if not usable:
+                log.info("%s skipped: %s", p.name, why)
+                results.append(ProviderResult(provider=p.name, ok=False, skipped=True, errors=[why]))
+                continue
+            try:
+                results.append(p.search(pairs))
+            except Exception as exc:  # a provider bug must not kill the run
+                log.exception("%s crashed", p.name)
+                results.append(ProviderResult(provider=p.name, ok=False, errors=[f"crashed: {exc}"]))
+
+    its = _dedupe([it for r in results for it in r.itineraries])
+    primary = (settings.trip.outbound, settings.trip.return_date)
+    for it in its:
+        it.route = classify(it)
+        if (it.outbound_date, it.return_date) == primary:
+            it.notes.append("primary")
+    its = score_all(its, settings.scoring)
+    ranked = sorted(its, key=lambda i: (not i.single_ticket, i.too_long, i.value_score, i.price))
+    best = best_single_ticket(its)
+
+    history, runs_today = _history(storage, run_id, today, dcfg.trend_basis)
+    current = Point(today, best.value_score, best.price) if best else None
+    decision: Decision = decide(today, current, history, dcfg)
+
+    tstats = today_stats(its, settings)
+    cal = calendar_stats(today, settings)
+    hstats = history_stats([(p.date, p.value_score, p.price) for p in history],
+                           best.value_score if best else None, runs_today)
+    provider_status = [{"provider": r.provider, "ok": r.ok, "skipped": r.skipped, "calls": r.calls,
+                        "itineraries": len(r.itineraries), "errors": r.errors[:10]} for r in results]
+
+    # --- JEV second opinion -----------------------------------------------------------
+    jcfg = settings.jev
+    jev_result: dict[str, Any] = {"ok": False, "skipped": True, "answers": {}, "buy_probability": None,
+                                  "error": None}
+    if not jcfg.get("enabled", True):
+        jev_result["error"] = "disabled in config.yaml"
+    elif not settings.env.get("JEV_API_KEY"):
+        jev_result["error"] = "JEV_API_KEY not set"
+    elif best is None:
+        jev_result["error"] = "no fares to evaluate"
+    elif fixtures:
+        jev_result["error"] = "not called for fixture data"
+    else:
+        state = jevmod.build_state(
+            {"trip": {"origin": settings.trip.origin, "destination": settings.trip.destination,
+                      "outbound": str(settings.trip.outbound), "return": str(settings.trip.return_date),
+                      "adults": settings.trip.adults, "cabin": settings.trip.cabin,
+                      "currency": settings.trip.currency},
+             "calendar": cal, "today": tstats, "history": hstats},
+            {"decision": decision.decision, "reason": decision.reason, "rule": decision.rule,
+             "vs_baseline_pct": decision.vs_baseline_pct, "vs_previous_pct": decision.vs_previous_pct,
+             "rising_streak": decision.rising_streak},
+            [option_summary(i) for i in ranked[:10]],
+            {k: str(v) for k, v in dcfg.__dict__.items()},
+            provider_status,
+        )
+        http_kwargs = {"retries": int(settings.http.get("retries", 3)),
+                       "backoff_base_s": float(settings.http.get("backoff_base_s", 2)),
+                       "timeout_s": 90}
+        model = settings.env.get("JEV_MODEL") or jcfg.get("model", "jev-latest")
+        jev_result = jevmod.evaluate(state, settings.env["JEV_API_KEY"], model, http_kwargs)
+        jev_result["skipped"] = False
+        save_raw("jev", {"request": {"model": model, "state": state}, "response": jev_result.pop("raw", None)})
+        decision = apply_jev(decision, jev_result.get("buy_probability"),
+                             jcfg.get("upgrade_hold_threshold"), int(jcfg.get("min_days_before_upgrade", 3)))
+
+    # --- report -------------------------------------------------------------------------
+    configured = [r for r in results if not r.skipped]
+    if not configured:
+        status = "failed"
+    elif all(r.ok and not r.errors for r in configured):
+        status = "ok"
+    elif any(r.ok for r in configured):
+        status = "partial"
+    else:
+        status = "failed"
+    if fixtures:
+        status = "fixture"
+
+    prev = history[-1] if history else None
+    baseline = history[0] if history else current
+    trend = {
+        "previous": {"date": str(prev.date), "value_score": prev.value_score, "price": prev.price} if prev else None,
+        "baseline": {"date": str(baseline.date), "value_score": baseline.value_score, "price": baseline.price}
+        if baseline else None,
+        "vs_previous_pct": decision.vs_previous_pct,
+        "vs_previous_price": round(best.price - prev.price, 2) if best and prev else None,
+        "vs_baseline_pct": pct_change(best.value_score, baseline.value_score) if best and baseline else None,
+        "vs_baseline_price": round(best.price - baseline.price, 2) if best and baseline else None,
+    }
+    report: dict[str, Any] = {
+        "run_id": run_id,
+        "run_at": now.isoformat(),
+        "status": status,
+        "fixture_data": bool(fixtures),
+        "dry_run": dry_run,
+        "day": decision.day,
+        "decision": {k: v for k, v in decision.__dict__.items()},
+        "best": ({**option_summary(best), "booking_link": best.booking_link} if best else None),
+        "top3": [{**option_summary(i), "booking_link": i.booking_link} for i in ranked[:3]],
+        "trend": trend,
+        "flex_saving": tstats["flex_saving"],
+        "suggestions": suggestions(best, its, tstats, cal, jev_result.get("answers", {})),
+        "providers": provider_status,
+        "jev": jev_result,
+        "stats": {"today": tstats, "history": hstats, "calendar": cal},
+        "api_calls": {r.provider: r.calls for r in results},
+    }
+    line = summary_line(report)
+    report["summary_line"] = line
+    storage.finish_run(run_id, status, report, ranked)
+    storage.append_log(run_id, today, line)
+    if not on_vercel and not dry_run:
+        path = settings.paths.get("daily_log", Path("logs/daily_log.md"))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        new = not path.exists()
+        with path.open("a") as fh:
+            if new:
+                fh.write("# MEL → ELS flight tracker – run log\n\n")
+            fh.write(f"- {line}\n")
+    log.info(line)
+    return report
+
+
+def summary_line(r: dict[str, Any]) -> str:
+    d = r["decision"]
+    b = r.get("best")
+    parts = [dt.datetime.fromisoformat(r["run_at"]).strftime("%Y-%m-%d %H:%M"), f"Day {r['day']}", d["decision"]]
+    if b:
+        parts.append(f"best AUD {b['price_aud']:,.0f} (route {b['route']}, {'/'.join(b['carriers'])}, "
+                     f"value {b['value_score']:,.0f})")
+    else:
+        parts.append("no usable fares")
+    t = r["trend"]
+    if t.get("vs_previous_pct") is not None:
+        parts.append(f"vs prev {t['vs_previous_pct']:+.1f}%")
+    if t.get("vs_baseline_pct") is not None:
+        parts.append(f"vs base {t['vs_baseline_pct']:+.1f}%")
+    parts.append("providers: " + ", ".join(
+        f"{p['provider']} {'skipped' if p['skipped'] else ('ok' if p['ok'] else 'FAILED')}" for p in r["providers"]))
+    bp = r["jev"].get("buy_probability")
+    if bp is not None:
+        parts.append(f"JEV p(book)={bp:.2f}")
+    if r.get("fixture_data"):
+        parts.append("FIXTURE DATA")
+    parts.append(d["reason"])
+    return " | ".join(parts)

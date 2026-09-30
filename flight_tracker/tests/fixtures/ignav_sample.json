@@ -1,0 +1,595 @@
+{
+ "_comment": "TEST FIXTURE \u2013 invented fares for unit tests and --fixtures dry runs. Not real prices.",
+ "2026-12-21_2027-01-08": {
+  "itineraries": [
+   {
+    "price": {
+     "amount": 3420,
+     "currency": "AUD"
+    },
+    "booking_url": "https://example.invalid/fixture-A",
+    "legs": [
+     {
+      "duration_minutes": 1350,
+      "segments": [
+       {
+        "origin": "MEL",
+        "destination": "PER",
+        "marketing_carrier": "QF",
+        "flight_number": "QF770",
+        "departure_time": "2026-12-21T06:00",
+        "arrival_time": "2026-12-21T07:35"
+       },
+       {
+        "origin": "PER",
+        "destination": "JNB",
+        "marketing_carrier": "QF",
+        "flight_number": "QF63",
+        "departure_time": "2026-12-21T10:35",
+        "arrival_time": "2026-12-21T17:20"
+       },
+       {
+        "origin": "JNB",
+        "destination": "ELS",
+        "marketing_carrier": "4Z",
+        "flight_number": "4Z8021",
+        "departure_time": "2026-12-21T19:30",
+        "arrival_time": "2026-12-21T21:00"
+       }
+      ],
+      "layovers": [
+       {
+        "duration_minutes": 180
+       },
+       {
+        "duration_minutes": 130
+       }
+      ]
+     },
+     {
+      "duration_minutes": 1420,
+      "segments": [
+       {
+        "origin": "ELS",
+        "destination": "JNB",
+        "marketing_carrier": "4Z",
+        "flight_number": "4Z8020",
+        "departure_time": "2027-01-08T06:00",
+        "arrival_time": "2027-01-08T07:30"
+       },
+       {
+        "origin": "JNB",
+        "destination": "PER",
+        "marketing_carrier": "QF",
+        "flight_number": "QF64",
+        "departure_time": "2027-01-08T11:30",
+        "arrival_time": "2027-01-09T05:05"
+       },
+       {
+        "origin": "PER",
+        "destination": "MEL",
+        "marketing_carrier": "QF",
+        "flight_number": "QF771",
+        "departure_time": "2027-01-09T07:30",
+        "arrival_time": "2027-01-09T13:10"
+       }
+      ],
+      "layovers": [
+       {
+        "duration_minutes": 240
+       },
+       {
+        "duration_minutes": 145
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "price": 3150,
+    "currency": "AUD",
+    "booking_url": "https://example.invalid/fixture-D",
+    "legs": [
+     {
+      "duration": "PT27H10M",
+      "segments": [
+       {
+        "origin": "MEL",
+        "destination": "DXB",
+        "marketing_carrier": "EK",
+        "flight_number": "EK409",
+        "departure_time": "2026-12-21T21:45",
+        "arrival_time": "2026-12-22T05:20"
+       },
+       {
+        "origin": "DXB",
+        "destination": "JNB",
+        "marketing_carrier": "EK",
+        "flight_number": "EK761",
+        "departure_time": "2026-12-22T09:50",
+        "arrival_time": "2026-12-22T16:00"
+       },
+       {
+        "origin": "JNB",
+        "destination": "ELS",
+        "marketing_carrier": "4Z",
+        "flight_number": "4Z8027",
+        "departure_time": "2026-12-22T18:20",
+        "arrival_time": "2026-12-22T19:50"
+       }
+      ],
+      "layovers": [
+       {
+        "duration_minutes": 270
+       },
+       {
+        "duration_minutes": 140
+       }
+      ]
+     },
+     {
+      "duration": "PT26H5M",
+      "segments": [
+       {
+        "origin": "ELS",
+        "destination": "JNB",
+        "marketing_carrier": "4Z",
+        "flight_number": "4Z8022",
+        "departure_time": "2027-01-08T07:00",
+        "arrival_time": "2027-01-08T08:30"
+       },
+       {
+        "origin": "JNB",
+        "destination": "DXB",
+        "marketing_carrier": "EK",
+        "flight_number": "EK762",
+        "departure_time": "2027-01-08T11:00",
+        "arrival_time": "2027-01-08T21:00"
+       },
+       {
+        "origin": "DXB",
+        "destination": "MEL",
+        "marketing_carrier": "EK",
+        "flight_number": "EK408",
+        "departure_time": "2027-01-09T02:30",
+        "arrival_time": "2027-01-09T22:00"
+       }
+      ],
+      "layovers": [
+       {
+        "duration_minutes": 150
+       },
+       {
+        "duration_minutes": 330
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "price": {
+     "amount": 2700,
+     "currency": "AUD"
+    },
+    "booking_url": "https://example.invalid/fixture-E",
+    "legs": [
+     {
+      "duration_minutes": 1500,
+      "segments": [
+       {
+        "origin": "MEL",
+        "destination": "PER",
+        "marketing_carrier": "QF",
+        "flight_number": "QF770",
+        "departure_time": "2026-12-21T06:00",
+        "arrival_time": "2026-12-21T07:35"
+       },
+       {
+        "origin": "PER",
+        "destination": "JNB",
+        "marketing_carrier": "QF",
+        "flight_number": "QF63",
+        "departure_time": "2026-12-21T10:35",
+        "arrival_time": "2026-12-21T17:20"
+       },
+       {
+        "origin": "JNB",
+        "destination": "ELS",
+        "marketing_carrier": "4Z",
+        "flight_number": "4Z8021",
+        "departure_time": "2026-12-21T19:30",
+        "arrival_time": "2026-12-21T21:00"
+       }
+      ],
+      "layovers": [
+       {
+        "duration_minutes": 180
+       },
+       {
+        "duration_minutes": 130
+       }
+      ]
+     },
+     {
+      "duration_minutes": 1500,
+      "segments": [
+       {
+        "origin": "ELS",
+        "destination": "JNB",
+        "marketing_carrier": "4Z",
+        "flight_number": "4Z8020",
+        "departure_time": "2027-01-08T06:00",
+        "arrival_time": "2027-01-08T07:30"
+       },
+       {
+        "origin": "JNB",
+        "destination": "PER",
+        "marketing_carrier": "QF",
+        "flight_number": "QF64",
+        "departure_time": "2027-01-08T11:30",
+        "arrival_time": "2027-01-09T05:05"
+       },
+       {
+        "origin": "PER",
+        "destination": "MEL",
+        "marketing_carrier": "QF",
+        "flight_number": "QF771",
+        "departure_time": "2027-01-09T07:30",
+        "arrival_time": "2027-01-09T13:10"
+       }
+      ],
+      "layovers": [
+       {
+        "duration_minutes": 240
+       },
+       {
+        "duration_minutes": 145
+       }
+      ]
+     }
+    ],
+    "self_transfer": true
+   },
+   {
+    "price": {
+     "amount": 3100,
+     "currency": "AUD"
+    },
+    "booking_url": "https://example.invalid/fixture-A",
+    "legs": [
+     {
+      "segments": [
+       {
+        "origin": "MEL",
+        "destination": "PER",
+        "marketing_carrier": "QF",
+        "flight_number": "QF770",
+        "departure_time": "2026-12-21T06:00",
+        "arrival_time": "2026-12-21T07:35"
+       },
+       {
+        "origin": "PER",
+        "destination": "JNB",
+        "marketing_carrier": "QF",
+        "flight_number": "QF63",
+        "departure_time": "2026-12-21T10:35",
+        "arrival_time": "2026-12-21T17:20"
+       },
+       {
+        "origin": "JNB",
+        "destination": "ELS",
+        "marketing_carrier": "4Z",
+        "flight_number": "4Z8021",
+        "departure_time": "2026-12-21T19:30",
+        "arrival_time": "2026-12-21T21:00"
+       }
+      ],
+      "layovers": [
+       {
+        "duration_minutes": 180
+       },
+       {
+        "duration_minutes": 130
+       }
+      ]
+     },
+     {
+      "duration_minutes": 1420,
+      "segments": [
+       {
+        "origin": "ELS",
+        "destination": "JNB",
+        "marketing_carrier": "4Z",
+        "flight_number": "4Z8020",
+        "departure_time": "2027-01-08T06:00",
+        "arrival_time": "2027-01-08T07:30"
+       },
+       {
+        "origin": "JNB",
+        "destination": "PER",
+        "marketing_carrier": "QF",
+        "flight_number": "QF64",
+        "departure_time": "2027-01-08T11:30",
+        "arrival_time": "2027-01-09T05:05"
+       },
+       {
+        "origin": "PER",
+        "destination": "MEL",
+        "marketing_carrier": "QF",
+        "flight_number": "QF771",
+        "departure_time": "2027-01-09T07:30",
+        "arrival_time": "2027-01-09T13:10"
+       }
+      ],
+      "layovers": [
+       {
+        "duration_minutes": 240
+       },
+       {
+        "duration_minutes": 145
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "price": null
+   }
+  ]
+ },
+ "2026-12-20_2027-01-08": {
+  "itineraries": [
+   {
+    "price": {
+     "amount": 3290,
+     "currency": "AUD"
+    },
+    "booking_url": "https://example.invalid/fixture-A",
+    "legs": [
+     {
+      "duration_minutes": 1350,
+      "segments": [
+       {
+        "origin": "MEL",
+        "destination": "PER",
+        "marketing_carrier": "QF",
+        "flight_number": "QF770",
+        "departure_time": "2026-12-21T06:00",
+        "arrival_time": "2026-12-21T07:35"
+       },
+       {
+        "origin": "PER",
+        "destination": "JNB",
+        "marketing_carrier": "QF",
+        "flight_number": "QF63",
+        "departure_time": "2026-12-21T10:35",
+        "arrival_time": "2026-12-21T17:20"
+       },
+       {
+        "origin": "JNB",
+        "destination": "ELS",
+        "marketing_carrier": "4Z",
+        "flight_number": "4Z8021",
+        "departure_time": "2026-12-21T19:30",
+        "arrival_time": "2026-12-21T21:00"
+       }
+      ],
+      "layovers": [
+       {
+        "duration_minutes": 180
+       },
+       {
+        "duration_minutes": 130
+       }
+      ]
+     },
+     {
+      "duration_minutes": 1420,
+      "segments": [
+       {
+        "origin": "ELS",
+        "destination": "JNB",
+        "marketing_carrier": "4Z",
+        "flight_number": "4Z8020",
+        "departure_time": "2027-01-08T06:00",
+        "arrival_time": "2027-01-08T07:30"
+       },
+       {
+        "origin": "JNB",
+        "destination": "PER",
+        "marketing_carrier": "QF",
+        "flight_number": "QF64",
+        "departure_time": "2027-01-08T11:30",
+        "arrival_time": "2027-01-09T05:05"
+       },
+       {
+        "origin": "PER",
+        "destination": "MEL",
+        "marketing_carrier": "QF",
+        "flight_number": "QF771",
+        "departure_time": "2027-01-09T07:30",
+        "arrival_time": "2027-01-09T13:10"
+       }
+      ],
+      "layovers": [
+       {
+        "duration_minutes": 240
+       },
+       {
+        "duration_minutes": 145
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "2026-12-21_2027-01-10": {
+  "itineraries": [
+   {
+    "price": {
+     "amount": 3380,
+     "currency": "AUD"
+    },
+    "booking_url": "https://example.invalid/fixture-A",
+    "legs": [
+     {
+      "duration_minutes": 1350,
+      "segments": [
+       {
+        "origin": "MEL",
+        "destination": "PER",
+        "marketing_carrier": "QF",
+        "flight_number": "QF770",
+        "departure_time": "2026-12-21T06:00",
+        "arrival_time": "2026-12-21T07:35"
+       },
+       {
+        "origin": "PER",
+        "destination": "JNB",
+        "marketing_carrier": "QF",
+        "flight_number": "QF63",
+        "departure_time": "2026-12-21T10:35",
+        "arrival_time": "2026-12-21T17:20"
+       },
+       {
+        "origin": "JNB",
+        "destination": "ELS",
+        "marketing_carrier": "4Z",
+        "flight_number": "4Z8021",
+        "departure_time": "2026-12-21T19:30",
+        "arrival_time": "2026-12-21T21:00"
+       }
+      ],
+      "layovers": [
+       {
+        "duration_minutes": 180
+       },
+       {
+        "duration_minutes": 130
+       }
+      ]
+     },
+     {
+      "duration_minutes": 1420,
+      "segments": [
+       {
+        "origin": "ELS",
+        "destination": "JNB",
+        "marketing_carrier": "4Z",
+        "flight_number": "4Z8020",
+        "departure_time": "2027-01-08T06:00",
+        "arrival_time": "2027-01-08T07:30"
+       },
+       {
+        "origin": "JNB",
+        "destination": "PER",
+        "marketing_carrier": "QF",
+        "flight_number": "QF64",
+        "departure_time": "2027-01-08T11:30",
+        "arrival_time": "2027-01-09T05:05"
+       },
+       {
+        "origin": "PER",
+        "destination": "MEL",
+        "marketing_carrier": "QF",
+        "flight_number": "QF771",
+        "departure_time": "2027-01-09T07:30",
+        "arrival_time": "2027-01-09T13:10"
+       }
+      ],
+      "layovers": [
+       {
+        "duration_minutes": 240
+       },
+       {
+        "duration_minutes": 145
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "price": 3900,
+    "currency": "AUD",
+    "booking_url": "https://example.invalid/fixture-D",
+    "legs": [
+     {
+      "duration": "PT31H",
+      "segments": [
+       {
+        "origin": "MEL",
+        "destination": "DXB",
+        "marketing_carrier": "EK",
+        "flight_number": "EK409",
+        "departure_time": "2026-12-21T21:45",
+        "arrival_time": "2026-12-22T05:20"
+       },
+       {
+        "origin": "DXB",
+        "destination": "JNB",
+        "marketing_carrier": "EK",
+        "flight_number": "EK761",
+        "departure_time": "2026-12-22T09:50",
+        "arrival_time": "2026-12-22T16:00"
+       },
+       {
+        "origin": "JNB",
+        "destination": "ELS",
+        "marketing_carrier": "4Z",
+        "flight_number": "4Z8027",
+        "departure_time": "2026-12-22T18:20",
+        "arrival_time": "2026-12-22T19:50"
+       }
+      ],
+      "layovers": [
+       {
+        "duration_minutes": 270
+       },
+       {
+        "duration_minutes": 140
+       }
+      ]
+     },
+     {
+      "duration": "PT25H",
+      "segments": [
+       {
+        "origin": "ELS",
+        "destination": "JNB",
+        "marketing_carrier": "4Z",
+        "flight_number": "4Z8022",
+        "departure_time": "2027-01-08T07:00",
+        "arrival_time": "2027-01-08T08:30"
+       },
+       {
+        "origin": "JNB",
+        "destination": "DXB",
+        "marketing_carrier": "EK",
+        "flight_number": "EK762",
+        "departure_time": "2027-01-08T11:00",
+        "arrival_time": "2027-01-08T21:00"
+       },
+       {
+        "origin": "DXB",
+        "destination": "MEL",
+        "marketing_carrier": "EK",
+        "flight_number": "EK408",
+        "departure_time": "2027-01-09T02:30",
+        "arrival_time": "2027-01-09T22:00"
+       }
+      ],
+      "layovers": [
+       {
+        "duration_minutes": 150
+       },
+       {
+        "duration_minutes": 330
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

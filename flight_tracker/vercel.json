@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/*.py": {
+      "maxDuration": 300,
+      "includeFiles": "{fttracker/**,config.yaml}"
+    }
+  },
+  "rewrites": [{ "source": "/", "destination": "/api/index" }],
+  "crons": [
+    { "path": "/api/cron", "schedule": "0 20 * * *" },
+    { "path": "/api/cron", "schedule": "0 1 * * *" },
+    { "path": "/api/cron", "schedule": "0 6 * * *" }
+  ]
+}

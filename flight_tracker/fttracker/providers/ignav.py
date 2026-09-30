@@ -1,0 +1,246 @@
+"""Ignav fare search – round-trip endpoint.
+
+Docs: https://ignav.com/docs/round-trip  (POST {base_url}/fares/round-trip, header X-Api-Key)
+
+The parser is deliberately tolerant about field names: it accepts the common
+variants for each value (e.g. `price` as a number or as {"amount", "currency"}).
+Anything it cannot read with confidence – a missing price or a leg with no
+duration – is dropped and reported, never guessed. Run
+`python tracker.py probe` once with a real key and check the stored raw JSON
+against this parser before relying on it (see README).
+"""
+from __future__ import annotations
+
+import datetime as dt
+import logging
+import re
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any
+
+from ..http import HttpError, request_json
+from ..models import Itinerary, Leg, ProviderResult, Segment
+from .base import FareProvider
+
+log = logging.getLogger(__name__)
+
+CABIN = {"economy": "economy", "premium_economy": "premium_economy",
+         "business": "business", "first": "first"}
+
+
+def _first(d: Any, *keys: str, default: Any = None) -> Any:
+    if not isinstance(d, dict):
+        return default
+    for k in keys:
+        if k in d and d[k] not in (None, ""):
+            return d[k]
+    return default
+
+
+def _code(v: Any) -> str:
+    """Airport / airline code from a string or a nested object."""
+    if isinstance(v, dict):
+        v = _first(v, "iata", "code", "id", "iata_code")
+    return str(v or "").strip().upper()
+
+
+def _minutes(v: Any) -> int | None:
+    """Accept 1234, "1234", "PT20H35M", or {"minutes": ...}."""
+    if v is None:
+        return None
+    if isinstance(v, dict):
+        return _minutes(_first(v, "minutes", "total_minutes"))
+    if isinstance(v, (int, float)):
+        return int(v)
+    s = str(v).strip()
+    if s.isdigit():
+        return int(s)
+    m = re.fullmatch(r"P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:\d+S)?", s)
+    if m and any(m.groups()):
+        d, h, mi = (int(x or 0) for x in m.groups())
+        return d * 1440 + h * 60 + mi
+    return None
+
+
+def _iso_diff_minutes(start: str | None, end: str | None) -> int | None:
+    """Duration from two ISO timestamps – only when both carry a UTC offset."""
+    try:
+        a, b = dt.datetime.fromisoformat(str(start)), dt.datetime.fromisoformat(str(end))
+    except (TypeError, ValueError):
+        return None
+    if a.tzinfo is None or b.tzinfo is None:
+        return None  # local times in different zones – cannot compute honestly
+    return int((b - a).total_seconds() // 60)
+
+
+def _parse_segment(s: dict[str, Any]) -> Segment:
+    carrier = _code(_first(s, "marketing_carrier", "carrier", "airline", "marketing_airline",
+                           "airline_code", "carrier_code"))
+    fn = _first(s, "flight_number", "number", "flight")
+    fn = str(fn) if fn is not None else None
+    if not carrier and fn:
+        m = re.match(r"^([A-Z0-9]{2})\s*\d", fn.upper())
+        carrier = m.group(1) if m else ""
+    return Segment(
+        origin=_code(_first(s, "origin", "from", "departure_airport", "departure", "origin_airport")),
+        destination=_code(_first(s, "destination", "to", "arrival_airport", "arrival",
+                                 "destination_airport")),
+        carrier=carrier,
+        operating_carrier=_code(_first(s, "operating_carrier", "operating_airline")) or None,
+        flight_number=fn,
+        departure=_first(s, "departure_time", "departure_at", "departs_at", "departure_datetime"),
+        arrival=_first(s, "arrival_time", "arrival_at", "arrives_at", "arrival_datetime"),
+        duration_min=_minutes(_first(s, "duration_minutes", "duration")),
+    )
+
+
+def _parse_leg(leg: dict[str, Any]) -> Leg | None:
+    segs_raw = _first(leg, "segments", "flights") or []
+    segments = [_parse_segment(s) for s in segs_raw if isinstance(s, dict)]
+    if not segments:
+        return None
+    duration = _minutes(_first(leg, "duration_minutes", "total_duration", "duration"))
+    if duration is None:
+        duration = _iso_diff_minutes(segments[0].departure, segments[-1].arrival)
+    if duration is None:
+        return None
+    layovers = [
+        m for m in (_minutes(_first(l, "duration_minutes", "duration"))
+                    for l in (_first(leg, "layovers", "connections") or []))
+        if m is not None
+    ]
+    if not layovers and len(segments) > 1:
+        for a, b in zip(segments, segments[1:]):
+            gap = _iso_diff_minutes(a.arrival, b.departure)
+            if gap is not None:
+                layovers.append(gap)
+    return Leg(segments=segments, duration_min=duration, layovers_min=layovers)
+
+
+def _is_self_transfer(it: dict[str, Any]) -> bool:
+    for k in ("self_transfer", "is_self_transfer", "separate_tickets", "virtual_interlining",
+              "multi_ticket"):
+        if it.get(k) is True:
+            return True
+    tickets = _first(it, "tickets", "ticket_count", "num_tickets")
+    if isinstance(tickets, int) and tickets > 1:
+        return True
+    if isinstance(tickets, list) and len(tickets) > 1:
+        return True
+    if it.get("single_ticket") is False:
+        return True
+    return False
+
+
+def parse_response(
+    payload: Any, out_date: dt.date, ret_date: dt.date, currency: str
+) -> tuple[list[Itinerary], list[str]]:
+    """Normalise an Ignav round-trip response. Returns (itineraries, problems)."""
+    problems: list[str] = []
+    items = payload if isinstance(payload, list) else _first(
+        payload, "itineraries", "results", "data", "fares", "offers", default=[])
+    if isinstance(items, dict):
+        items = _first(items, "itineraries", "results", default=[])
+    result: list[Itinerary] = []
+    dropped = 0
+    for it in items or []:
+        if not isinstance(it, dict):
+            continue
+        price_raw = _first(it, "price", "total_price", "amount", "fare")
+        cur = currency
+        if isinstance(price_raw, dict):
+            cur = str(_first(price_raw, "currency", default=currency)).upper()
+            price_raw = _first(price_raw, "amount", "total", "value")
+        cur = str(_first(it, "currency", default=cur)).upper()
+        try:
+            price = float(price_raw)
+        except (TypeError, ValueError):
+            dropped += 1
+            continue
+        if cur != currency.upper():
+            problems.append(f"skipped a fare quoted in {cur} (expected {currency})")
+            continue
+        legs_raw = _first(it, "legs", "slices", "journeys", "bounds") or []
+        if not legs_raw and ("outbound" in it or "inbound" in it or "return" in it):
+            legs_raw = [it.get("outbound"), _first(it, "inbound", "return")]
+        legs = [_parse_leg(l) for l in legs_raw if isinstance(l, dict)]
+        if len(legs) != 2 or any(l is None for l in legs):
+            dropped += 1
+            continue
+        result.append(Itinerary(
+            provider="ignav",
+            outbound_date=out_date,
+            return_date=ret_date,
+            price=price,
+            currency=currency,
+            outbound=legs[0],  # type: ignore[arg-type]
+            inbound=legs[1],   # type: ignore[arg-type]
+            single_ticket=not _is_self_transfer(it),
+            booking_link=_first(it, "booking_url", "booking_link", "deep_link", "url"),
+        ))
+    if dropped:
+        problems.append(f"{dropped} itinerar{'y' if dropped == 1 else 'ies'} dropped "
+                        "(missing price, legs or leg duration)")
+    return result, problems
+
+
+class IgnavProvider(FareProvider):
+    name = "ignav"
+
+    def is_configured(self) -> tuple[bool, str]:
+        if not self.cfg.get("enabled", True):
+            return False, "disabled in config.yaml"
+        if not self.settings.env.get("IGNAV_API_KEY"):
+            return False, "IGNAV_API_KEY is not set"
+        return True, ""
+
+    def build_body(self, out_date: dt.date, ret_date: dt.date) -> dict[str, Any]:
+        t = self.settings.trip
+        body: dict[str, Any] = {
+            "origin": t.origin,
+            "destination": t.destination,
+            "departure_date": out_date.isoformat(),
+            "return_date": ret_date.isoformat(),
+            "adults": t.adults,
+            "cabin_class": CABIN.get(t.cabin, t.cabin),
+            "currency": t.currency,
+        }
+        body.update(self.cfg.get("extra_body") or {})
+        return body
+
+    def search(self, pairs: list[tuple[dt.date, dt.date]]) -> ProviderResult:
+        res = ProviderResult(provider=self.name, ok=False)
+        url = self.cfg.get("base_url", "https://ignav.com/api").rstrip("/") + \
+            self.cfg.get("endpoint", "/fares/round-trip")
+        headers = {"X-Api-Key": self.settings.env["IGNAV_API_KEY"],
+                   "Content-Type": "application/json", "Accept": "application/json"}
+        def fetch(pair: tuple[dt.date, dt.date]) -> tuple[dict[str, Any], Any, str | None]:
+            body = self.build_body(*pair)
+            try:
+                return body, request_json("POST", url, json=body, headers=headers, **self.http_kwargs), None
+            except HttpError as exc:
+                return body, None, str(exc)
+
+        # Calls run in parallel (keeps a run inside the Vercel time limit); results are
+        # processed in order on this thread because storage connections aren't thread-safe.
+        workers = max(1, int(self.cfg.get("concurrency", 4)))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            fetched = list(pool.map(fetch, pairs))
+
+        succeeded = 0
+        for (out_date, ret_date), (body, payload, err) in zip(pairs, fetched):
+            label = f"ignav_{out_date:%m%d}_{ret_date:%m%d}"
+            res.calls += 1
+            if err is not None:
+                msg = f"{out_date:%d %b}–{ret_date:%d %b}: {err}"
+                log.error("Ignav %s", msg)
+                res.errors.append(msg)
+                res.raw_files.append(self.save_raw(label + "_error", {"request": body, "error": err}))
+                continue
+            res.raw_files.append(self.save_raw(label, {"request": body, "response": payload}))
+            its, problems = parse_response(payload, out_date, ret_date, self.settings.trip.currency)
+            res.errors += [f"{out_date:%d %b}–{ret_date:%d %b}: {p}" for p in problems]
+            res.itineraries += its
+            succeeded += 1
+            log.info("Ignav %s–%s: %d itineraries", out_date, ret_date, len(its))
+        res.ok = succeeded > 0
+        return res

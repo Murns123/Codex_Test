@@ -1,0 +1,77 @@
+# Flight price tracker – MEL -> ELS return, Dec 2026 / Jan 2027
+# Secrets (API keys, SMTP) live in .env, never here.
+
+trip:
+  origin: MEL
+  destination: ELS
+  outbound: 2026-12-21
+  return: 2027-01-08
+  adults: 1
+  cabin: economy
+  currency: AUD
+  flex:
+    outbound: [2026-12-19, 2026-12-20, 2026-12-22]
+    return: [2027-01-07, 2027-01-09, 2027-01-10]
+  # cross = primary pair + each flex outbound with primary return
+  #         + primary outbound with each flex return  (7 searches/provider)
+  # grid  = every outbound x every return            (16 searches/provider)
+  flex_mode: cross
+
+scoring:
+  dollars_per_hour: 50          # penalty per hour over the threshold, per direction
+  hours_threshold: 22           # hours per direction before the penalty starts
+  too_long_hours: 30            # any direction longer than this is flagged "too long"...
+  too_long_exempt_saving: 500   # ...unless its price beats the best non-flagged option by more than this
+
+decision:
+  buy_below_baseline_pct: 5     # BUY if best value_score is this % or more below baseline
+  buy_under_price: 3000         # BUY if best single-ticket price is under this (AUD)
+  rising_runs_for_buy: 2        # BUY if best has risen this many runs in a row
+  hold_movement_pct: 3          # HOLD if day-on-day movement is under this %
+  book_by: 2026-10-14           # on/after this date: recommend booking the best option
+  hard_stop: 2026-10-31         # no searches after this date
+  # The tracker runs 3x a day. "day" = compare each day's latest run (spec semantics:
+  # "vs yesterday", "risen 2 days in a row"). "run" = compare every run.
+  trend_basis: day
+
+jev:
+  enabled: true                 # silently skipped if JEV_API_KEY is not set
+  model: jev-latest             # overridden by JEV_MODEL in the environment
+  # JEV can upgrade a HOLD to BUY when P(book today) >= this. It never downgrades a BUY.
+  # Set to null to make JEV advisory only.
+  upgrade_hold_threshold: 0.80
+  min_days_before_upgrade: 3
+
+providers:
+  ignav:
+    enabled: true
+    base_url: https://ignav.com/api
+    endpoint: /fares/round-trip
+    timeout_s: 60
+    concurrency: 4              # parallel requests (date pairs)
+    # extra_body: {max_stops: 3}  # merged into every request body
+  serpapi:
+    enabled: true               # silently skipped if SERPAPI_KEY is not set
+    base_url: https://serpapi.com/search.json
+    timeout_s: 60
+    # SerpApi returns outbound options first; each return leg needs one extra call.
+    # Fetch return legs only for the cheapest N outbound options per date pair.
+    return_legs_for_top_n: 2
+    # Only search SerpApi on the primary date pair (flex dates stay on Ignav) to keep cost down.
+    primary_dates_only: true
+
+http:
+  retries: 3                    # attempts after the first one
+  backoff_base_s: 2             # 2s, 4s, 8s ...
+  retry_on_status: [429, 500, 502, 503, 504]
+
+
+# Local runs use SQLite + files. When DATABASE_URL is set (Vercel), everything –
+# runs, raw JSON, the daily log – goes to Postgres instead.
+paths:
+  db: data/tracker.sqlite3
+  raw_dir: data/raw
+  daily_log: logs/daily_log.md
+  app_log: logs/tracker.log
+
+timezone: Australia/Melbourne
