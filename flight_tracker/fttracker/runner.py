@@ -36,6 +36,9 @@ def open_storage(settings: Settings, dry_run: bool = False) -> Storage:
             http_kwargs={"retries": int(settings.http.get("retries", 3)),
                          "backoff_base_s": float(settings.http.get("backoff_base_s", 2)), "timeout_s": 30})
         return DocStorage(store, dry_run=dry_run)
+    if settings.env.get("VERCEL"):
+        raise RuntimeError("No Blob store connected: in Vercel, Storage -> Create -> Blob (private), connect it "
+                           "to this project, then redeploy. That sets BLOB_READ_WRITE_TOKEN.")
     return SqliteStorage(sqlite_path=settings.paths.get("db"), dry_run=dry_run)
 
 
