@@ -334,7 +334,7 @@ def _sparkline(points: list[tuple[str, float]], w: int = 640, h: int = 140) -> s
             f"<text x='{pad}' y='{h - 6}' fill='var(--muted)' font-size='11'>{lo:,.0f}</text></svg>")
 
 
-def _jev_panel(j: dict[str, Any], order: list[str] | None = None) -> str:
+def _jev_panel(j: dict[str, Any], order: list[str] | None = None, org: str = "SYD", dst: str = "JNB") -> str:
     if j.get("skipped"):
         return f"<p class='muted'>JEV not used this run ({_e(j.get('error'))}).</p>"
     if not j.get("ok"):
@@ -344,7 +344,8 @@ def _jev_panel(j: dict[str, Any], order: list[str] | None = None) -> str:
     choices, probs = [], []
     for key in keys:
         v = a[key]
-        label = _e(JEV_LABELS.get(key, key.replace("_", " ")))
+        label = _e(JEV_LABELS.get(key, key.replace("_", " "))
+                   .replace("SYD → JNB", f"{org} → {dst}").replace("JNB → SYD", f"{dst} → {org}"))
         if isinstance(v, dict) and "probabilities" in v:
             ps = ", ".join(f"{_choice_label(k)} {p:.0%}" for k, p in sorted((v.get("probabilities") or {}).items(),
                                                                        key=lambda kv: -kv[1]) if p >= 0.01)
@@ -709,7 +710,8 @@ def route_html(q: dict[str, Any], anchor: str) -> str:
                  + _jev_panel(q.get("jev") or {"skipped": True, "error": "not run"},
                               ["action", "preferred_airline", "best_outbound_date", "best_return_date", "urgency",
                                "value_rating"]
-                              + list(route_questions(out_dates or ["x"], back_dates or ["x"], org, dst, airline or None))))
+                              + list(route_questions(out_dates or ["x"], back_dates or ["x"], org, dst, airline or None)),
+                              org, dst))
     if q.get("rt_matrix"):
         m = q["rt_matrix"]
         outs = sorted({k.split("_")[0] for k in m}); rets = sorted({k.split("_")[1] for k in m})
@@ -717,7 +719,7 @@ def route_html(q: dict[str, Any], anchor: str) -> str:
         rows = "".join(f"<tr><th>{_d(o)}</th>" + "".join(
             f"<td class='num{' best' if m.get(f'{o}_{r}') == best else ''}'>{_money(m.get(f'{o}_{r}'))}</td>" for r in rets)
             + "</tr>" for o in outs)
-        parts.append("<h3>Return fare by dates</h3><p class='muted small'>Rows: SYD → JNB date · columns: JNB → SYD date · "
+        parts.append(f"<h3>Return fare by dates</h3><p class='muted small'>Rows: {_e(org)} → {_e(dst)} date · columns: {_e(dst)} → {_e(org)} date · "
                      "cheapest highlighted.</p><div class='scroll'><table><thead><tr><th></th>"
                      + "".join(f"<th class='num'>{_d(r)}</th>" for r in rets) + f"</tr></thead><tbody>{rows}</tbody></table></div>")
     obd = q.get("ow_by_date") or {}
