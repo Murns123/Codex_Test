@@ -81,8 +81,6 @@ def to_text(r: dict[str, Any]) -> str:
                      f"{o['hours_out']}h out ({o['stops_out']} stops) / {o['hours_back']}h back ({o['stops_back']} stops)  "
                      f"longest layover {o['longest_layover_h']}h  value {o['value_score']:,.0f}"
                      f"{'  TOO LONG' if o['too_long'] else ''}{'' if o['single_ticket'] else '  SELF-TRANSFER'}")
-        if o.get("price_note"):
-            lines.append(f"     ({o['price_note']})")
         if o.get("booking_link"):
             lines.append(f"     {o['booking_link']}")
     lines.append("")
@@ -243,7 +241,7 @@ def _options_table(opts: list[dict[str, Any]]) -> str:
             flags.append("over 30h one way")
         if not o["single_ticket"]:
             flags.append("self-transfer")
-        note = f"<div class='muted small'>{_e(o['price_note'])}</div>" if o.get("price_note") else ""
+        note = ""   # prices are shown in AUD only; the USD source amount stays in /api/report
         rows.append(
             f"<tr><td>{i}</td><td class='num'>{_money(o['price_aud'])}{note}</td>"
             f"<td>{_e(o['route'])} · {_e(o['route_label'])}<div class='muted small'>{_e('/'.join(o['carriers']))}</div></td>"
@@ -443,9 +441,7 @@ def to_html(r: dict[str, Any] | None, recent_runs: list[dict[str, Any]] | None =
                      "ok": q.get("status") == "ok", "calls": q.get("calls", 0),
                      "itineraries": sum(len(v) for v in (q.get("options") or {}).values()),
                      "errors": q.get("errors", [])})
-    fx = r.get("fx") or q.get("fx")
-    notes = [x for x in (ut, (f"USD prices converted at {fx['rates'].get('USD')} ({fx.get('source')}, {_d(fx.get('date'))})"
-                              if fx and fx.get("rates", {}).get("USD") else None)) if x]
+    notes = [ut] if ut else []
     parts.append("<h3>Sources this run</h3>" + "".join(f"<p class='muted'>{_e(n)}</p>" for n in notes)
                  + "<div class='scroll'><table><thead><tr><th>Source</th><th>Status</th>"
                  "<th class='num'>API calls</th><th class='num'>Fares</th><th>Notes</th></tr></thead><tbody>" + "".join(
@@ -485,7 +481,7 @@ def _qf_options(rows: list[dict[str, Any]], kind: str, empty: str) -> str:
     for i, o in enumerate(rows, 1):
         link = (f"<a href='{_e(o['booking_link'])}' target='_blank' rel='noopener'>{_e(o.get('link_kind') or 'book')}</a>"
                 if o.get("booking_link") else "–")
-        note = f"<div class='muted small'>{_e(o['price_note'])}</div>" if o.get("price_note") else ""
+        note = ""   # prices are shown in AUD only; the USD source amount stays in /api/report
         if kind == "rt":
             body.append(f"<tr><td>{i}</td><td class='num'>{_money(o['price_aud'])}{note}</td>"
                         f"<td>{_e(o['out']['flights'])}<div class='muted small'>{_e(o['out']['route'])} · {o['out']['hours']}h</div></td>"
