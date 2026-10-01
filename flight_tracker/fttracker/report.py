@@ -4,6 +4,7 @@ from __future__ import annotations
 import datetime as dt
 import html
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from .jev import QUESTIONS
 
@@ -143,8 +144,8 @@ body{margin:0;background:var(--bg);color:var(--ink);
  padding:26px 16px 58px;position:relative;overflow:hidden}
 .hero:after{content:"";position:absolute;right:-80px;top:-120px;width:420px;height:420px;border-radius:50%;
  background:radial-gradient(circle,rgba(150,186,255,.35),rgba(150,186,255,0) 70%)}
-.hero .in{max-width:1040px;margin:0 auto;position:relative;z-index:1}
-.brandrow{display:flex;align-items:center;gap:14px}.brandrow>div:last-child{min-width:0}
+.hero .in{max-width:1008px;margin:0 auto;position:relative;z-index:1}
+.brandrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.clocks{margin-left:auto;display:flex;gap:10px}.clock{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:6px 14px;min-width:128px}.clock .t{font-size:22px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.2}.clock .z{font-size:11px;text-transform:uppercase;letter-spacing:.8px;opacity:.8}.clock .d{font-size:12px;opacity:.75}.brandrow>div:nth-child(2){flex:1 1 240px;min-width:0}
 .logo{width:46px;height:46px;border-radius:12px;background:rgba(255,255,255,.14);display:grid;place-items:center;
  box-shadow:inset 0 0 0 1px rgba(255,255,255,.25);flex-shrink:0}
 .hero h1{font-weight:300;font-size:26px;letter-spacing:.2px;margin:0;line-height:1.2}
@@ -205,7 +206,7 @@ a{color:var(--blue)}ul{margin:6px 0;padding-left:20px}ul li{margin:4px 0}code{fo
 svg{max-width:100%;height:auto;display:block}
 footer{max-width:1040px;margin:0 auto;padding:22px 16px 40px;color:var(--muted);font-size:13px;border-top:1px solid var(--line)}
 footer b{color:var(--ink);font-weight:500}
-@media (max-width:600px){.hero{padding-bottom:46px}.hero h1{font-size:21px}.chip{white-space:normal}.answers{margin-top:-24px}.answer .v{font-size:22px}}
+@media (max-width:600px){.hero{padding-bottom:46px}.clocks{margin-left:0;width:100%}.clock{flex:1;min-width:0}.hero h1{font-size:21px}.chip{white-space:normal}.answers{margin-top:-24px}.answer .v{font-size:22px}}
 """
 
 
@@ -413,7 +414,8 @@ def to_html(r: dict[str, Any] | None, recent_runs: list[dict[str, Any]] | None =
     cal0 = (r.get("stats") or {}).get("calendar", {})
     hero = (f"<header class='hero'><div class='in'><div class='brandrow'><div class='logo'>{LOGO}</div>"
             f"<div><h1>Murn's <b>Melbourne SA</b> Flight Tracker</h1>"
-            "<div class='sub'>Melbourne → East London · 21 Dec 2026 – 8 Jan 2027 · 1 adult economy</div></div></div>"
+            "<div class='sub'>Melbourne → East London · 21 Dec 2026 – 8 Jan 2027 · 1 adult economy</div></div>"
+            f"{_clocks()}</div>"
             "<div class='chips'>"
             f"<span class='chip'>Day {_e(r.get('day') or '–')} of tracking</span>"
             f"<span class='chip'>Last run {run_at:%a %-d %b, %H:%M}</span>"
@@ -553,10 +555,37 @@ LOGO = ("<svg width='26' height='26' viewBox='0 0 24 24' fill='none' aria-hidden
         " .9.4 4-1.7 4.6-2 4.8-2.1c1-.5 1.3-1.4.8-2.3z' fill='#fff'/></svg>")
 
 
+SA_TZ = "Africa/Johannesburg"
+HOME_TZ = "Australia/Melbourne"
+
+
+def _clocks(now: dt.datetime | None = None) -> str:
+    """Two live clocks: the viewer's own time (browser zone) and South Africa. Server-rendered
+    with Melbourne/SAST so they read sensibly before the script runs."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+
+    def one(cid: str, label: str, t: dt.datetime) -> str:
+        return (f"<div class='clock' id='{cid}'><div class='z'>{label}</div>"
+                f"<div class='t'>{t:%H:%M}</div><div class='d'>{t:%a %-d %b} · {t:%Z}</div></div>")
+    return ("<div class='clocks'>" + one("clk-local", "Your time", now.astimezone(ZoneInfo(HOME_TZ)))
+            + one("clk-sa", "South Africa", now.astimezone(ZoneInfo(SA_TZ))) + "</div>")
+
+
+CLOCK_JS = """<script>(function(){
+function zone(tz){try{return new Intl.DateTimeFormat('en-AU',{timeZone:tz,timeZoneName:'short'}).formatToParts(new Date())
+.find(function(p){return p.type==='timeZoneName'}).value}catch(e){return ''}}
+function put(id,tz){var el=document.getElementById(id);if(!el)return;var n=new Date(),o=tz?{timeZone:tz}:{};
+el.querySelector('.t').textContent=n.toLocaleTimeString('en-GB',Object.assign({hour:'2-digit',minute:'2-digit'},o));
+el.querySelector('.d').textContent=n.toLocaleDateString('en-AU',Object.assign({weekday:'short',day:'numeric',month:'short'},o))
++' · '+(tz==='Africa/Johannesburg'?'SAST':zone(tz||Intl.DateTimeFormat().resolvedOptions().timeZone));}
+function tick(){put('clk-local');put('clk-sa','Africa/Johannesburg');}
+tick();setInterval(tick,15000);})();</script>"""
+
+
 def _page(body: str, hero: str = "", footer: str = "") -> str:
     hero = hero or (f"<header class='hero'><div class='in'><div class='brandrow'><div class='logo'>{LOGO}</div>"
                     f"<div><h1>{_e(BRAND)}</h1><div class='sub'>Melbourne → East London fare intelligence</div>"
-                    "</div></div></div></header>")
+                    f"</div>{_clocks()}</div></div></header>")
     return ("<!doctype html><html lang='en'><head><meta charset='utf-8'>"
             "<meta name='viewport' content='width=device-width,initial-scale=1'>"
             f"<title>{_e(BRAND)}</title><meta name='theme-color' content='#2d4399'>"
@@ -570,7 +599,7 @@ def _page(body: str, hero: str = "", footer: str = "") -> str:
             f"<style>{CSS}</style></head><body>{hero}<main>{body}</main>"
             + (footer or f"<footer><b>{_e(BRAND)}</b> · fares from Ignav and Google Flights · decisions by rules with a "
                          "JEV second opinion</footer>")
-            + "</body></html>")
+            + CLOCK_JS + "</body></html>")
 
 
 # --- Qantas SYD <-> JNB section ---------------------------------------------------------------
