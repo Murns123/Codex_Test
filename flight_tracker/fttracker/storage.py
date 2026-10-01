@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS runs (
     best_value REAL,
     best_price REAL,
     best_route TEXT,
-    report_json TEXT
+    report_json TEXT,
+    series_json TEXT
 );
 CREATE TABLE IF NOT EXISTS itineraries (
     id {pk},
@@ -81,6 +82,10 @@ class SqliteStorage:
         for stmt in SCHEMA.format(pk="INTEGER PRIMARY KEY AUTOINCREMENT").split(";"):
             if stmt.strip():
                 self._exec(stmt)
+        try:   # databases created before the Qantas section
+            self._exec("ALTER TABLE runs ADD COLUMN series_json TEXT")
+        except sqlite3.OperationalError:
+            pass
         self.conn.commit()
 
     # -- low level ---------------------------------------------------------------
@@ -125,9 +130,10 @@ class SqliteStorage:
         dec = report.get("decision") or {}
         self._exec(
             "UPDATE runs SET status=?, decision=?, rule=?, reason=?, best_value=?, best_price=?, "
-            "best_route=?, report_json=? WHERE id=?",
+            "best_route=?, report_json=?, series_json=? WHERE id=?",
             (status, dec.get("decision"), dec.get("rule"), dec.get("reason"), best.get("value_score"),
-             best.get("price_aud"), best.get("route"), json.dumps(report, default=str), run_id))
+             best.get("price_aud"), best.get("route"), json.dumps(report, default=str),
+             json.dumps(report.get("series") or {}), run_id))
         for rank, it in enumerate(itineraries, 1):
             self._exec(
                 "INSERT INTO itineraries (run_id, rank, provider, out_date, ret_date, route, price, value_score,"
@@ -154,6 +160,12 @@ class SqliteStorage:
         rows = self._rows("SELECT id, run_at, run_date, best_value, best_price FROM runs "
                           "WHERE best_value IS NOT NULL ORDER BY run_at, id")
         return [r for r in rows if r["id"] != exclude_run_id]
+
+    def series_rows(self, exclude_run_id: int | None = None) -> list[dict[str, Any]]:
+        """[{id, run_at, run_date, series:{name: value}}] oldest first – extra tracked series."""
+        rows = self._rows("SELECT id, run_at, run_date, series_json FROM runs WHERE series_json IS NOT NULL "
+                          "ORDER BY run_at, id")
+        return [{**r, "series": json.loads(r.pop("series_json") or "{}")} for r in rows if r["id"] != exclude_run_id]
 
     def latest_report(self) -> dict[str, Any] | None:
         rows = self._rows("SELECT report_json FROM runs WHERE report_json IS NOT NULL "
@@ -237,6 +249,7 @@ class DocStorage:
             "decision": dec.get("decision"), "rule": dec.get("rule"), "reason": dec.get("reason"),
             "best_value": best.get("value_score"), "best_price": best.get("price_aud"),
             "best_route": best.get("route"), "summary_line": report.get("summary_line"),
+            "series": report.get("series") or {},
         }
         self.store.put_json(f"runs/{run_id}.json", {
             "row": row, "report": report,
@@ -252,6 +265,9 @@ class DocStorage:
     # -- reads ---------------------------------------------------------------------------
     def scored_runs(self, exclude_run_id: int | None = None) -> list[dict[str, Any]]:
         return [r for r in self._load_index() if r.get("best_value") is not None and r["id"] != exclude_run_id]
+
+    def series_rows(self, exclude_run_id: int | None = None) -> list[dict[str, Any]]:
+        return [r for r in self._load_index() if r.get("series") and r["id"] != exclude_run_id]
 
     def latest_report(self) -> dict[str, Any] | None:
         idx = self._load_index()

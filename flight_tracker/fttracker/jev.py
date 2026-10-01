@@ -121,20 +121,22 @@ def extract(answers: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def buy_probability(flat: dict[str, Any]) -> float | None:
-    """P(book today) = P(buy_now) + P(buy_flex) from the action question."""
+def buy_probability(flat: dict[str, Any], choices: tuple[str, ...] = ("buy_now", "buy_flex")) -> float | None:
+    """P(book today) = sum of the 'book' choices of the action question."""
     action = flat.get("action")
     if not isinstance(action, dict):
         return None
     p = action.get("probabilities") or {}
     if not p:
         return None
-    return float(p.get("buy_now", 0)) + float(p.get("buy_flex", 0))
+    return sum(float(p.get(c, 0)) for c in choices)
 
 
-def evaluate(state: dict[str, Any], api_key: str, model: str, http_kwargs: dict[str, Any]) -> dict[str, Any]:
+def evaluate(state: dict[str, Any], api_key: str, model: str, http_kwargs: dict[str, Any],
+             questions: dict[str, dict[str, Any]] | None = None,
+             buy_choices: tuple[str, ...] = ("buy_now", "buy_flex")) -> dict[str, Any]:
     """Returns {"ok": bool, "answers": {...}, "buy_probability": float|None, "error": str|None, "raw": ...}."""
-    body = {"model": model, "state": state, "questions": QUESTIONS}
+    body = {"model": model, "state": state, "questions": questions or QUESTIONS}
     try:
         raw = request_json("POST", f"{JEV_BASE}/v1/systemone", json=body,
                            headers={"Authorization": f"Bearer {api_key}",
@@ -144,5 +146,5 @@ def evaluate(state: dict[str, Any], api_key: str, model: str, http_kwargs: dict[
         log.error("JEV failed: %s", exc)
         return {"ok": False, "answers": {}, "buy_probability": None, "error": str(exc), "raw": None}
     flat = extract(raw.get("answers", {}))
-    return {"ok": True, "answers": flat, "buy_probability": buy_probability(flat), "error": None,
+    return {"ok": True, "answers": flat, "buy_probability": buy_probability(flat, buy_choices), "error": None,
             "model": raw.get("model", model), "usage": raw.get("usage"), "raw": raw}

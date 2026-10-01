@@ -103,6 +103,19 @@ class Itinerary:
 
 
 @dataclass
+class OneWay:
+    """A one-way fare (used by the Qantas SYD <-> JNB section)."""
+    provider: str
+    date: dt.date
+    price: float
+    currency: str
+    leg: Leg
+    single_ticket: bool = True
+    booking_link: str | None = None
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass
 class ProviderResult:
     provider: str
     ok: bool

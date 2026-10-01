@@ -78,6 +78,7 @@ class Settings:
     http: dict[str, Any]
     jev: dict[str, Any]
     storage: dict[str, Any]
+    qantas: dict[str, Any]
     paths: dict[str, Path]
     timezone: str
     env: dict[str, str] = field(default_factory=dict)
@@ -126,6 +127,7 @@ def load_settings(config_path: Path | None = None, env_path: Path | None = None)
         http=raw.get("http", {}),
         jev=raw.get("jev", {}),
         storage=raw.get("storage", {}),
+        qantas=raw.get("qantas", {}),
         paths=paths,
         timezone=raw.get("timezone", "Australia/Melbourne"),
         env=env,

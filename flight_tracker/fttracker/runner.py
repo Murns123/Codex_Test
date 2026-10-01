@@ -9,6 +9,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from . import jev as jevmod
+from . import qantas
 from .classify import classify
 from .config import Settings
 from .decision import Decision, Point, apply_jev, decide, pct_change
@@ -294,6 +295,23 @@ def _run(settings: Settings, storage: Storage, now: dt.datetime, today: dt.date,
         "stats": {"today": tstats, "history": hstats, "calendar": cal},
         "api_calls": {r.provider: r.calls for r in results},
     }
+
+    # --- Qantas SYD <-> JNB section (isolated: a failure here never breaks the main run) ----
+    if settings.qantas.get("enabled"):
+        try:
+            fx_fetch = None
+            if fixtures:
+                fx_fetch = qantas.fixture_fetch(json.loads(fixtures.read_text()))
+            section = qantas.run_section(
+                settings, now=now, flex_this_run=flex_this_run,
+                history_rows=storage.series_rows(exclude_run_id=run_id), save_raw=save_raw,
+                fetch=fx_fetch, main_best=report["best"], fixture=bool(fixtures))
+        except Exception as exc:
+            log.exception("Qantas section failed")
+            section = {"enabled": True, "status": "failed", "errors": [f"crashed: {exc}"], "calls": 0}
+        report["qantas"] = section
+        report["series"] = section.get("series") or {}
+        report["api_calls"]["ignav_qantas"] = section.get("calls", 0)
     line = summary_line(report)
     report["summary_line"] = line
     storage.finish_run(run_id, status, report, ranked)
@@ -329,6 +347,11 @@ def summary_line(r: dict[str, Any]) -> str:
     bp = r["jev"].get("buy_probability")
     if bp is not None:
         parts.append(f"JEV p(book)={bp:.2f}")
+    qs = r.get("qantas") or {}
+    if qs.get("series", {}).get("qf_rt") is not None:
+        parts.append(f"QF SYD-JNB return AUD {qs['series']['qf_rt']:,.0f} ({qs.get('decision', {}).get('decision')})")
+    elif qs.get("enabled"):
+        parts.append(f"QF SYD-JNB: {qs.get('status')}")
     if r.get("fixture_data"):
         parts.append("FIXTURE DATA")
     parts.append(d["reason"])

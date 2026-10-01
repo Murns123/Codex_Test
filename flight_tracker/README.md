@@ -84,6 +84,58 @@ P(buy_now) + P(buy_flex) ≥ `jev.upgrade_hold_threshold` (0.80), and only from 
 a BUY and is never asked for a price. Set the threshold to `null` to make JEV advisory only. If JEV fails,
 the dashboard says so and the rules' decision stands.
 
+### Qantas SYD ⇄ JNB section
+
+The tracker also follows Qantas between Sydney and Johannesburg on the trip dates, with its own
+rules and its own JEV evaluation. It appears as a separate section on the dashboard and in
+`/api/report` under `qantas`.
+
+**Fare series**, Qantas-only, with every segment marketed or operated by QF:
+
+| Series | What it tracks | Dates |
+|---|---|---|
+| `qf_rt` | SYD–JNB–SYD return | 21 Dec / 8 Jan |
+| `qf_out` | one-way SYD → JNB | 21 Dec |
+| `qf_back` | one-way JNB → SYD | 8 Jan |
+
+On the 17:00 run it also searches every flex date. That produces a return-fare matrix (outbound ×
+return dates), the cheapest date combination, and one-way prices by date.
+
+**Statistics**, per series:
+
+- Baseline and daily closes.
+- All-time low and high, mean, standard deviation, z-score and percentile.
+- 7-day and all-time slope, volatility, and up/down days.
+- **Fare steps**: day-on-day moves of 8% or more. Airline fares move in buckets, so a step up that
+  doesn't reverse suggests a cheaper bucket has sold out.
+
+**Comparisons:**
+
+- The return vs two one-ways.
+- The nonstop (QF63/QF64) premium over connecting Qantas options.
+- The Qantas return vs the main MEL → ELS best. That comparison covers SYD–JNB only and excludes the
+  Melbourne and East London legs.
+
+**Rules:** the same engine as the main tracker, applied to the return fare: baseline, a 5% drop,
+2 rises in a row, under 3% movement, and the 14 Oct book-by date. There's an optional
+`buy_under_price` target. All of it is configurable under `qantas.decision`.
+
+**JEV** gets the full Qantas picture: options, date matrix, every statistic and the rules' decision.
+It answers 16–18 questions:
+
+- **Probabilities:** rise in 7 days, 5% drop before book-by, good price, upward trend, fare bucket
+  closing, volatility, one-ways vs return, whether nonstop is worth the premium, outbound and return
+  scarcity risk, whether the flex dates are worth it, Qantas vs the main best, and data quality.
+- **Choices:** book return / book one-ways / hold; the best outbound date and the best return date.
+- **Scores:** urgency and value rating.
+
+As in the main tracker, JEV can only upgrade a HOLD to a BUY, from day 3 at P ≥ 0.80.
+
+**Cost:** Ignav, using `airlines_include: ["QF"]`, takes 3 calls on the 07:00 and 12:00 runs and 15
+on the 17:00 run (7 return date pairs + 8 one-way dates), so about 21 calls a day. Add one JEV call
+per run. If Ignav rejects the airline filter, the request is retried without it and the results are
+filtered locally.
+
 ### Never inventing fares
 
 - A provider that fails, whether from retries exhausted, a bad key or a crash, is listed on the dashboard
