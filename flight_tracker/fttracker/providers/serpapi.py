@@ -154,7 +154,7 @@ class SerpApiProvider(FareProvider):
             label = f"serpapi_{out_date:%m%d}_{ret_date:%m%d}"
             res.calls += 1 + len(r["returns"])
             if r["error"]:
-                res.errors.append(f"{out_date:%d %b}–{ret_date:%d %b}: {r['error']}")
+                res.errors.append(f"{out_date:%-d %b}–{ret_date:%-d %b}: {r['error']}")
                 res.raw_files.append(self.save_raw(label + "_error", {"request": r["params"], "error": r["error"]}))
                 continue
             first = r["first"]
@@ -163,10 +163,10 @@ class SerpApiProvider(FareProvider):
             if (out_date, ret_date) == primary and first.get("price_insights"):
                 res.extras["price_insights"] = first["price_insights"]
             if not options(first):
-                res.errors.append(f"{out_date:%d %b}–{ret_date:%d %b}: Google returned no flights")
+                res.errors.append(f"{out_date:%-d %b}–{ret_date:%-d %b}: Google returned no flights")
             for i, (out_opt, second, err) in enumerate(r["returns"], 1):
                 if err:
-                    res.errors.append(f"{out_date:%d %b}–{ret_date:%d %b} return legs: {err}")
+                    res.errors.append(f"{out_date:%-d %b}–{ret_date:%-d %b} return legs: {err}")
                     continue
                 res.raw_files.append(self.save_raw(f"{label}_return{i}", {"request": r["params"], "response": second}))
                 out_leg = parse_leg(out_opt)

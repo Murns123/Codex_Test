@@ -174,8 +174,9 @@ class SqliteStorage:
         return json.loads(rows[0]["report_json"]) if rows else None
 
     def recent_runs(self, limit: int = 60) -> list[dict[str, Any]]:
-        return self._rows("SELECT id, run_at, run_date, status, decision, reason, best_value, best_price,"
-                          " best_route FROM runs ORDER BY run_at DESC, id DESC LIMIT ?", (limit,))
+        rows = self._rows("SELECT id, run_at, run_date, status, decision, reason, best_value, best_price,"
+                          " best_route, series_json FROM runs ORDER BY run_at DESC, id DESC LIMIT ?", (limit,))
+        return [{**r, "series": json.loads(r.pop("series_json") or "{}")} for r in rows]
 
     def log_lines(self, limit: int = 200) -> list[str]:
         rows = self._rows("SELECT line FROM daily_log ORDER BY id DESC LIMIT ?", (limit,))

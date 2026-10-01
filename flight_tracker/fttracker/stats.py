@@ -45,7 +45,7 @@ def option_summary(it: Itinerary) -> dict[str, Any]:
         "route": it.route,
         "route_label": route_label(it.route),
         "provider": it.provider,
-        "dates": f"{it.outbound_date:%d %b}–{it.return_date:%d %b}",
+        "dates": f"{it.outbound_date:%-d %b}–{it.return_date:%-d %b}",
         "price_aud": it.price,
         "value_score": it.value_score,
         "carriers": it.carriers,
@@ -83,7 +83,7 @@ def today_stats(its: list[Itinerary], settings: Settings) -> dict[str, Any]:
     flex_saving = None
     if primary_best and best_flex and best_flex.value_score < primary_best.value_score:
         flex_saving = {
-            "dates": f"{best_flex.outbound_date:%d %b}–{best_flex.return_date:%d %b}",
+            "dates": f"{best_flex.outbound_date:%-d %b}–{best_flex.return_date:%-d %b}",
             "value_saving": _r(primary_best.value_score - best_flex.value_score),
             "price_saving": _r(primary_best.price - best_flex.price),
         }

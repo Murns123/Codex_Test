@@ -55,7 +55,7 @@ def _leg_summary(leg: Leg) -> dict[str, Any]:
 
 
 def rt_summary(it: Itinerary) -> dict[str, Any]:
-    return {"dates": f"{it.outbound_date:%d %b}–{it.return_date:%d %b}",
+    return {"dates": f"{it.outbound_date:%-d %b}–{it.return_date:%-d %b}",
             "out_date": str(it.outbound_date), "ret_date": str(it.return_date),
             "price_aud": it.price, "out": _leg_summary(it.outbound), "back": _leg_summary(it.inbound),
             "nonstop_both": it.outbound.stops == 0 and it.inbound.stops == 0,

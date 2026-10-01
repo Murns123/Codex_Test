@@ -51,7 +51,7 @@ def decide(today: dt.date, current: Point | None, history: list[Point], cfg: Dec
     baseline = history[0].value_score if history else (current.value_score if current else None)
 
     if today > cfg.hard_stop:
-        return Decision("STOP", f"Tracking ended on {cfg.hard_stop:%d %b %Y} (hard stop).", "hard_stop",
+        return Decision("STOP", f"Tracking ended on {cfg.hard_stop:%-d %b %Y} (hard stop).", "hard_stop",
                         day, baseline)
 
     if current is None:
@@ -71,7 +71,7 @@ def decide(today: dt.date, current: Point | None, history: list[Point], cfg: Dec
     if today >= cfg.book_by:
         final = " Today is the hard stop." if today == cfg.hard_stop else ""
         d.decision, d.rule = "BUY", "book_by"
-        d.reason = f"It's {today:%d %b} – past the {cfg.book_by:%d %b} book-by date, so lock in the best single-ticket fare.{final}"
+        d.reason = f"It's {today:%-d %b} – past the {cfg.book_by:%-d %b} book-by date, so lock in the best single-ticket fare.{final}"
     elif current.price < cfg.buy_under_price:
         d.decision, d.rule = "BUY", "under_price"
         d.reason = f"Best single-ticket fare is AUD {current.price:,.0f}, under the AUD {cfg.buy_under_price:,.0f} buy line."

@@ -344,7 +344,7 @@ class IgnavProvider(FareProvider):
             label = f"ignav_{out_date:%m%d}_{ret_date:%m%d}"
             res.calls += 1
             if err is not None:
-                msg = f"{out_date:%d %b}–{ret_date:%d %b}: {err}"
+                msg = f"{out_date:%-d %b}–{ret_date:%-d %b}: {err}"
                 log.error("Ignav %s", msg)
                 res.errors.append(msg)
                 res.raw_files.append(self.save_raw(label + "_error", {"request": body, "error": err}))
@@ -352,7 +352,7 @@ class IgnavProvider(FareProvider):
             res.raw_files.append(self.save_raw(label, {"request": body, "response": payload}))
             its, problems = parse_response(payload, out_date, ret_date, self.settings.trip.currency,
                                            self._fx(payload, res))
-            res.errors += [f"{out_date:%d %b}–{ret_date:%d %b}: {p}" for p in problems]
+            res.errors += [f"{out_date:%-d %b}–{ret_date:%-d %b}: {p}" for p in problems]
             res.itineraries += its
             succeeded += 1
             log.info("Ignav %s–%s: %d itineraries", out_date, ret_date, len(its))

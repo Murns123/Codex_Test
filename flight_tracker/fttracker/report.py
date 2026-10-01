@@ -141,6 +141,14 @@ th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertic
 th{color:var(--muted);font-weight:600}td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(160px,100%),1fr));gap:12px}
 .kpi .s{color:var(--muted);font-size:12px;margin-top:2px}
+.small{font-size:12px}td.wrap{white-space:normal;min-width:160px}
+nav{display:flex;gap:16px;flex-wrap:wrap;margin:6px 0 4px}nav a{font-size:14px}
+.answers{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:12px}
+a.answer{color:inherit;text-decoration:none;display:block}a.answer:hover{border-color:var(--bar)}
+.answer .l{color:var(--muted);font-size:13px;margin-bottom:8px}.answer .row{display:flex;gap:12px;align-items:center;margin-bottom:8px}
+.answer .v{font-size:20px;font-weight:700}.answer .pill{font-size:18px}
+details{margin-top:14px}summary{cursor:pointer;font-weight:600}td.best{font-weight:700;color:var(--buy)}
+h2{border-top:1px solid var(--line);padding-top:22px}
 .kpi .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}.kpi .l{color:var(--muted);font-size:13px}
 .bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;min-width:80px}
 .bar>span{display:block;height:100%;background:var(--bar)}
@@ -153,29 +161,99 @@ def _e(x: Any) -> str:
     return html.escape("" if x is None else str(x))
 
 
+def _d(iso: str | None) -> str:
+    """'2026-12-22' -> '22 Dec' (consistent date style across the page)."""
+    if not iso:
+        return "–"
+    try:
+        return dt.date.fromisoformat(str(iso)[:10]).strftime("%-d %b")
+    except ValueError:
+        return str(iso)
+
+
+def _num(v: Any, kind: str) -> str:
+    if v is None:
+        return "–"
+    if isinstance(v, bool):
+        return "yes" if v else "no"
+    if kind == "money":
+        return _money(v)
+    if kind == "pct":
+        return f"{v:+.1f}%" if isinstance(v, (int, float)) else str(v)
+    if kind == "slope":
+        return f"{v:+,.0f} AUD/day"
+    if kind == "pctile":
+        return f"{v:.0f}%"
+    if kind == "z":
+        return f"{v:+.2f}"
+    return f"{v:,}" if isinstance(v, int) else str(v)
+
+
+# (key, label, kind) – statistics shown in the collapsible "Detailed statistics" boxes
+STAT_ROWS = [
+    ("days_observed", "Days observed", "int"), ("baseline_value", "Day-1 baseline", "money"),
+    ("all_time_low_value", "Lowest seen", "money"), ("all_time_high_value", "Highest seen", "money"),
+    ("mean_value", "Average", "money"), ("stdev_value", "Standard deviation", "money"),
+    ("current_zscore", "Today vs average (z-score)", "z"), ("current_percentile", "Today's percentile", "pctile"),
+    ("is_all_time_low", "Today is the lowest seen", "bool"), ("days_since_low", "Days since the low", "int"),
+    ("slope_7d_aud_per_day", "7-day trend", "slope"), ("slope_all_aud_per_day", "Trend since day 1", "slope"),
+    ("vs_7d_mean_pct", "Today vs 7-day average", "pct"), ("volatility_daily_pct", "Day-to-day volatility", "pct"),
+    ("up_days", "Days up", "int"), ("down_days", "Days down", "int"),
+    ("largest_daily_rise_pct", "Biggest daily rise", "pct"), ("largest_daily_drop_pct", "Biggest daily drop", "pct"),
+]
+
+JEV_LABELS = {
+    # main trip
+    "book_now_is_right": "Booking today is the right call", "likely_rise_next_7d": "Price higher in 7 days",
+    "likely_drop_5pct_before_book_by": "Drop of 5%+ before 14 Oct", "trend_is_upward": "Genuine upward trend",
+    "current_is_good_price": "Today's price is a good price", "volatility_high": "Volatile enough to risk a jump",
+    "best_option_good_value": "Top option is good overall value", "connection_risk_high": "Top option has risky connections",
+    "flex_dates_worth_it": "Flex dates worth switching to", "self_transfer_worth_considering": "Self-transfer worth the risk",
+    "data_quality_concern": "Data-quality concern (short history, gaps)", "action": "Recommended action",
+    "preferred_route": "Preferred route", "urgency": "Urgency",
+    # Qantas
+    "rt_rise_next_7d": "Return higher in 7 days", "rt_drop_5pct_before_book_by": "Return drops 5%+ before 14 Oct",
+    "rt_good_price": "Return is a good price", "fare_bucket_closing": "Cheaper fare buckets selling out",
+    "one_ways_better_than_return": "Two one-ways beat the return", "nonstop_worth_premium": "Nonstop worth the premium",
+    "outbound_scarcity_risk": "SYD → JNB sell-out risk", "return_scarcity_risk": "JNB → SYD sell-out risk",
+    "qantas_beats_main_best": "Qantas plan beats the MEL → ELS best", "value_rating": "Value for money",
+    "best_outbound_date": "Best SYD → JNB date", "best_return_date": "Best JNB → SYD date",
+}
+CHOICE_LABELS = {"hold": "Hold", "buy_now": "Book now", "buy_flex": "Book on flex dates",
+                 "book_return_now": "Book the return", "book_one_ways_now": "Book two one-ways",
+                 "A": "A · Qantas via PER", "B": "B · Qantas via SYD", "C": "C · SAA via PER",
+                 "D": "D · Gulf/Asia hub", "other": "Other"}
+
+
+def _choice_label(v: str) -> str:
+    if v in CHOICE_LABELS:
+        return CHOICE_LABELS[v]
+    return _d(v) if len(v) == 10 and v[4] == "-" else v
+
+
 def _options_table(opts: list[dict[str, Any]]) -> str:
     if not opts:
         return "<p class='muted'>No fares were retrieved this run, so none are shown.</p>"
     rows = []
     for i, o in enumerate(opts, 1):
-        link = f"<a href='{_e(o['booking_link'])}' target='_blank' rel='noopener'>{_e(o.get('link_kind') or 'book')}</a>" if o.get("booking_link") else "–"
+        link = (f"<a href='{_e(o['booking_link'])}' target='_blank' rel='noopener'>{_e(o.get('link_kind') or 'book')}</a>"
+                if o.get("booking_link") else "–")
         flags = []
         if o["too_long"]:
-            flags.append("too long")
+            flags.append("over 30h one way")
         if not o["single_ticket"]:
             flags.append("self-transfer")
+        note = f"<div class='muted small'>{_e(o['price_note'])}</div>" if o.get("price_note") else ""
         rows.append(
-            f"<tr><td>{i}</td><td class='num'>{_money(o['price_aud'])}"
-            + (f"<div class='muted' style='font-size:11px'>{_e(o['price_note'])}</div>" if o.get("price_note") else "")
-            + f"</td><td>{_e(o['route'])} · {_e(o['route_label'])}</td>"
-            f"<td>{_e('/'.join(o['carriers']))}</td><td>{_e(o['dates'])}</td>"
-            f"<td class='num'>{o['hours_out']}h · {o['stops_out']} stop(s)</td>"
-            f"<td class='num'>{o['hours_back']}h · {o['stops_back']} stop(s)</td>"
-            f"<td class='num'>{o['longest_layover_h']}h</td><td>{'yes' if o['single_ticket'] else 'no'}</td>"
-            f"<td class='num'>{o['value_score']:,.0f}</td><td>{_e(', '.join(flags)) or '–'}</td><td>{link}</td></tr>")
-    return ("<div class='scroll'><table><thead><tr><th>#</th><th class='num'>Price</th><th>Route</th><th>Carriers</th>"
-            "<th>Dates</th><th class='num'>Out</th><th class='num'>Back</th><th class='num'>Longest layover</th>"
-            "<th>Single ticket</th><th class='num'>Value score</th><th>Flags</th><th>Link</th></tr></thead><tbody>"
+            f"<tr><td>{i}</td><td class='num'>{_money(o['price_aud'])}{note}</td>"
+            f"<td>{_e(o['route'])} · {_e(o['route_label'])}<div class='muted small'>{_e('/'.join(o['carriers']))}</div></td>"
+            f"<td class='num'>{o['hours_out']}h · {o['stops_out']} stop{'s' if o['stops_out'] != 1 else ''}</td>"
+            f"<td class='num'>{o['hours_back']}h · {o['stops_back']} stop{'s' if o['stops_back'] != 1 else ''}</td>"
+            f"<td class='num'>{o['longest_layover_h']}h</td><td class='num'>{o['value_score']:,.0f}</td>"
+            f"<td class='wrap'>{_e(', '.join(flags)) or '–'}</td><td>{link}</td></tr>")
+    return ("<div class='scroll'><table><thead><tr><th>#</th><th class='num'>Price</th><th>Route</th>"
+            "<th class='num'>Out</th><th class='num'>Back</th><th class='num'>Longest layover</th>"
+            "<th class='num'>Value score</th><th>Flags</th><th>Link</th></tr></thead><tbody>"
             + "".join(rows) + "</tbody></table></div>")
 
 
@@ -197,32 +275,71 @@ def _sparkline(points: list[tuple[str, float]], w: int = 640, h: int = 140) -> s
             f"<text x='{pad}' y='{h - 6}' fill='var(--muted)' font-size='11'>{lo:,.0f}</text></svg>")
 
 
-def _jev_panel(j: dict[str, Any]) -> str:
+def _jev_panel(j: dict[str, Any], order: list[str] | None = None) -> str:
     if j.get("skipped"):
         return f"<p class='muted'>JEV not used this run ({_e(j.get('error'))}).</p>"
     if not j.get("ok"):
         return f"<div class='warn'>JEV failed: {_e(j.get('error'))}. The decision above is from the rules only.</div>"
     a = j.get("answers", {})
-    order = [k for k in QUESTIONS if k in a] + [k for k in a if k not in QUESTIONS]
-    rows = []
-    for key in order:
+    keys = list(dict.fromkeys([k for k in (order or []) if k in a] + list(a)))   # ordered, no repeats
+    choices, probs = [], []
+    for key in keys:
         v = a[key]
-        label = _e(key.replace("_", " "))
-        if isinstance(v, (int, float)):
-            rows.append(f"<tr><td>{label}</td><td class='num'>{v:.0%}</td>"
-                        f"<td><div class='bar'><span style='width:{v * 100:.0f}%'></span></div></td></tr>")
-        elif isinstance(v, dict) and "probabilities" in v:
-            probs = ", ".join(f"{k} {p:.0%}" for k, p in sorted((v.get("probabilities") or {}).items(),
-                                                              key=lambda kv: -kv[1]))
-            rows.append(f"<tr><td>{label}</td><td class='num'><b>{_e(v.get('choice'))}</b></td>"
-                        f"<td style='white-space:normal'>{_e(probs)}</td></tr>")
+        label = _e(JEV_LABELS.get(key, key.replace("_", " ")))
+        if isinstance(v, dict) and "probabilities" in v:
+            ps = ", ".join(f"{_choice_label(k)} {p:.0%}" for k, p in sorted((v.get("probabilities") or {}).items(),
+                                                                       key=lambda kv: -kv[1]) if p >= 0.01)
+            choices.append(f"<tr><td>{label}</td><td><b>{_e(_choice_label(str(v.get('choice'))))}</b></td>"
+                           f"<td class='wrap muted'>{_e(ps)}</td></tr>")
         elif isinstance(v, dict) and "score" in v:
-            rows.append(f"<tr><td>{label}</td><td class='num'><b>{_e(v.get('score'))}</b> / 5</td>"
-                        f"<td>confidence {v.get('confidence') or 0:.0%}</td></tr>")
+            sc = v.get("score")
+            choices.append(f"<tr><td>{label}</td><td><b>{sc:.1f}</b> / 5</td>"
+                           f"<td class='muted'>confidence {v.get('confidence') or 0:.0%}</td></tr>")
+        elif isinstance(v, (int, float)):
+            probs.append(f"<tr><td>{label}</td><td class='num'>{v:.0%}</td>"
+                         f"<td><div class='bar'><span style='width:{v * 100:.0f}%'></span></div></td></tr>")
     bp = j.get("buy_probability")
-    head = f"<p><b>P(book today) = {bp:.0%}</b> <span class='muted'>(model {_e(j.get('model'))})</span></p>" \
-        if bp is not None else ""
-    return head + "<div class='scroll'><table><tbody>" + "".join(rows) + "</tbody></table></div>"
+    head = (f"<p><b>Probability that booking today is right: {bp:.0%}</b> "
+            f"<span class='muted'>(model {_e(j.get('model'))})</span></p>") if bp is not None else ""
+    return (head + "<div class='scroll'><table><tbody>" + "".join(choices) + "</tbody></table></div>"
+            + ("<h3>Probabilities</h3><div class='scroll'><table><tbody>" + "".join(probs) + "</tbody></table></div>"
+               if probs else ""))
+
+
+def _jev_line(j: dict[str, Any] | None) -> str:
+    j = j or {}
+    if not j.get("ok"):
+        return "JEV: not available this run"
+    act = (j.get("answers") or {}).get("action") or {}
+    bp = j.get("buy_probability")
+    return (f"JEV: {_choice_label(str(act.get('choice', '–')))}"
+            + (f" · {bp:.0%} that booking today is right" if bp is not None else ""))
+
+
+def _stats_details(series: list[tuple[str, dict[str, Any]]], extra_rows: str = "") -> str:
+    head = "".join(f"<th class='num'>{_e(n)}</th>" for n, _ in series)
+    body = "".join("<tr><td>" + _e(label) + "</td>" + "".join(
+        f"<td class='num'>{_e(_num((h or {}).get(k), kind))}</td>" for _, h in series) + "</tr>"
+        for k, label, kind in STAT_ROWS)
+    return ("<details class='card'><summary>Detailed statistics</summary><div class='scroll'><table><thead><tr><th></th>"
+            f"{head}</tr></thead><tbody>{body}{extra_rows}</tbody></table></div></details>")
+
+
+def _decision_card(title: str, anchor: str, d: dict[str, Any] | None, price: str, price_label: str,
+                   j: dict[str, Any] | None) -> str:
+    if not d:
+        return (f"<a class='card answer' href='#{anchor}'><div class='l'>{_e(title)}</div>"
+                "<div class='muted'>Not run.</div></a>")
+    return (f"<a class='card answer' href='#{anchor}'><div class='l'>{_e(title)}</div>"
+            f"<div class='row'><span class='pill {_e(d['decision'])}'>{_e(d['decision'])}</span>"
+            f"<div><div class='v'>{_e(price)}</div><div class='muted small'>{_e(price_label)}</div></div></div>"
+            f"<div class='small'>{_e(d['reason'])}</div><div class='muted small'>{_e(_jev_line(j))}</div></a>")
+
+
+def _kpis(tiles: list[tuple[str, Any, str]]) -> str:
+    return "<div class='grid'>" + "".join(
+        f"<div class='card kpi'><div class='l'>{_e(a)}</div><div class='v'>{_e(b)}</div><div class='s'>{_e(c)}</div></div>"
+        for a, b, c in tiles) + "</div>"
 
 
 def to_html(r: dict[str, Any] | None, recent_runs: list[dict[str, Any]] | None = None,
@@ -232,100 +349,122 @@ def to_html(r: dict[str, Any] | None, recent_runs: list[dict[str, Any]] | None =
                 "set the baseline.</p>")
         return _page(body)
     d, t, s = r["decision"], r["trend"], r.get("stats", {})
+    q = r.get("qantas") or {}
     run_at = dt.datetime.fromisoformat(r["run_at"])
-    parts = [f"<h1>{_e(headline(r))}</h1>",
-             f"<p class='muted'>Last run {run_at:%a %d %b %Y, %H:%M} Melbourne time · status {_e(r['status'])}</p>"]
+    b = r.get("best")
+    parts = [f"<h1>MEL → East London flight tracker · Day {_e(r.get('day') or '–')}</h1>",
+             f"<p class='muted'>Last run {run_at:%a %-d %b %Y, %H:%M} Melbourne time · "
+             f"next runs 07:00, 12:00 and 17:00</p>",
+             "<nav><a href='#trip'>MEL → ELS trip</a>"
+             + ("<a href='#qantas'>Qantas SYD ⇄ JNB</a>" if q else "") + "<a href='#data'>Data &amp; runs</a></nav>"]
     if r.get("fixture_data"):
         parts.append("<div class='fixture'>FIXTURE DATA – these are test fares, not real prices.</div>")
-    parts.append(f"<div class='card banner'><span class='pill {_e(d['decision'])}'>{_e(d['decision'])}</span>"
-                 f"<div>{_e(d['reason'])}" + "".join(f"<div class='muted'>{_e(n)}</div>" for n in d.get("notes", []))
-                 + "</div></div>")
+
+    # --- today's answers ---------------------------------------------------------------------
+    qd, qcur = q.get("decision"), q.get("series") or {}
+    parts.append("<h2>Today's answers</h2><div class='answers'>"
+                 + _decision_card("MEL → ELS trip (21 Dec / 8 Jan)", "trip", d,
+                                  _money(b["price_aud"]) if b else "no fares",
+                                  f"best single ticket · route {b['route']}" if b else "", r.get("jev"))
+                 + (_decision_card("Qantas SYD ⇄ JNB return", "qantas", qd, _money(qcur.get("qf_rt")),
+                                   "Qantas only · 21 Dec / 8 Jan", q.get("jev")) if q else "")
+                 + "</div>")
     for p in provider_problems(r):
         parts.append(f"<div class='warn'>{_e(p)}</div>")
 
-    b = r.get("best")
+    # --- main trip ---------------------------------------------------------------------------
     fs = r.get("flex_saving")
     cal = s.get("calendar", {})
-    flex_sub = flex_text(fs).split(" – ", 1)[-1] if fs else "primary dates are best"
-    parts.append("<h2>At a glance</h2><div class='grid'>" + "".join(
-        f"<div class='card kpi'><div class='l'>{_e(label)}</div><div class='v'>{_e(val)}</div>"
-        f"<div class='s'>{_e(sub)}</div></div>" for label, val, sub in [
-            ("Best single-ticket fare", _money(b["price_aud"]) if b else "–",
-             f"route {b['route']} · {'/'.join(b['carriers'])}" if b else "no fares retrieved"),
-            ("vs yesterday", _pct(t.get("vs_previous_pct")), "value score"),
-            ("vs baseline (day 1)", _pct(t.get("vs_baseline_pct")), "value score"),
-            ("Best flex dates", fs["dates"] if fs else "none",
-             flex_sub + (f" · checked {r['flex_checked_at'][11:16]} {r['flex_checked_at'][8:10]}/{r['flex_checked_at'][5:7]}"
-                         if r.get("flex_checked_at") and not r.get("flex_searched") else "")),
-            ("Google price level", ((r.get("google_insights") or {}).get("price_level") or "–").upper(),
-             (insights_text(r.get("google_insights")) or "no insight returned").split(", ", 1)[-1]),
-            ("Days to book-by", cal.get("days_to_book_by", "–"), "14 Oct 2026"),
-            ("Days to departure", cal.get("days_to_departure", "–"), "21 Dec 2026"),
-        ]) + "</div>")
+    gi = r.get("google_insights") or {}
+    flex_sub = flex_text(fs).split(" – ", 1)[-1] if fs else "the primary dates are best"
+    if r.get("flex_checked_at") and not r.get("flex_searched"):
+        flex_sub += f" · checked {_d(r['flex_checked_at'])} {r['flex_checked_at'][11:16]}"
+    parts.append("<h2 id='trip'>MEL → East London trip</h2>")
+    parts.append(f"<div class='card banner'><span class='pill {_e(d['decision'])}'>{_e(d['decision'])}</span>"
+                 f"<div>{_e(d['reason'])}" + "".join(f"<div class='muted'>{_e(n)}</div>" for n in d.get("notes", []))
+                 + "</div></div>")
+    parts.append(_kpis([
+        ("Best single-ticket fare", _money(b["price_aud"]) if b else "–",
+         f"route {b['route']} · {'/'.join(b['carriers'])}" if b else "no fares retrieved"),
+        ("vs yesterday", _pct(t.get("vs_previous_pct")), "change in value score"),
+        ("vs day 1", _pct(t.get("vs_baseline_pct")), "change in value score"),
+        ("Google price level", (gi.get("price_level") or "–").upper(),
+         (insights_text(gi) or "no insight returned").split(", ", 1)[-1]),
+        ("Best flex dates", fs["dates"] if fs else "none", flex_sub),
+        ("Days to book-by", cal.get("days_to_book_by", "–"), "14 Oct 2026"),
+    ]))
+    parts.append("<h3>Top 3 options – 21 Dec / 8 Jan</h3>" + _options_table(r.get("top3", [])))
+    parts.append("<h3>Suggestions</h3><ul>" + "".join(f"<li>{_e(x)}</li>" for x in r.get("suggestions", [])) + "</ul>")
+    parts.append("<h3>JEV second opinion</h3>" + _jev_panel(r.get("jev", {}), list(QUESTIONS)))
 
-    parts.append("<h2>Top 3 options – 21 Dec / 8 Jan</h2>" + _options_table(r.get("top3", [])))
-    parts.append("<h2>Suggestions</h2><ul>" + "".join(f"<li>{_e(x)}</li>" for x in r.get("suggestions", [])) + "</ul>")
-
-    hist = s.get("history", {})
-    closes = [(c["date"], c["value"]) for c in hist.get("recent_closes", [])]
-    if b:
-        closes.append((run_at.date().isoformat(), b["value_score"]))
-    parts.append("<h2>Best value score by day</h2><div class='card'>" + _sparkline(closes) + "</div>")
-
-    gh = (r.get("google_insights") or {}).get("price_history") or []
-    if len(gh) >= 2:
-        pts = [(dt.datetime.fromtimestamp(t, dt.timezone.utc).date().isoformat(), float(p)) for t, p in gh
-               if isinstance(t, (int, float)) and isinstance(p, (int, float))]
-        parts.append("<h2>Google's price history for the primary dates</h2><div class='card'>"
-                     + _sparkline(pts) + "</div>")
-
-    stat_rows = [(k.replace("_", " "), v) for k, v in hist.items()
-                 if k not in ("recent_closes", "daily_change_pct", "intraday") and not isinstance(v, (list, dict))]
-    tdist = s.get("today", {}).get("price_distribution", {})
-    stat_rows += [(f"today price {k}", _money(v)) for k, v in tdist.items()]
-    parts.append("<h2>Statistics</h2><div class='scroll'><table><tbody>" + "".join(
-        f"<tr><td>{_e(k)}</td><td class='num'>{_e('–' if v is None else v)}</td></tr>" for k, v in stat_rows) + "</tbody></table></div>")
-
+    by_pair = s.get("today", {}).get("by_date_pair", {})
+    if by_pair:
+        parts.append("<h3>Flex dates – best fare per date pair</h3><div class='scroll'><table><thead><tr>"
+                     "<th>Out → Back</th><th class='num'>Best price</th><th class='num'>Value score</th><th>Route</th>"
+                     "</tr></thead><tbody>" + "".join(
+                         f"<tr><td>{_d(k.split('_')[0])} → {_d(k.split('_')[1])}"
+                         + (" <span class='muted small'>(primary)</span>" if k == '2026-12-21_2027-01-08' else "")
+                         + f"</td><td class='num'>{_money(v['best_price'])}</td><td class='num'>{v['best_value']:,.0f}</td>"
+                         f"<td>{_e(v['route'])}</td></tr>" for k, v in by_pair.items()) + "</tbody></table></div>")
     by_route = s.get("today", {}).get("by_route", {})
     if by_route:
-        parts.append("<h2>By route</h2><div class='scroll'><table><thead><tr><th>Route</th><th class='num'>Options</th>"
+        parts.append("<h3>By route</h3><div class='scroll'><table><thead><tr><th>Route</th><th class='num'>Options</th>"
                      "<th class='num'>Cheapest</th><th class='num'>Best value</th><th class='num'>Fastest out</th>"
                      "<th class='num'>Fastest back</th></tr></thead><tbody>" + "".join(
                          f"<tr><td>{_e(k)} · {_e(v['label'])}</td><td class='num'>{v['options']}</td>"
                          f"<td class='num'>{_money(v['cheapest_price'])}</td><td class='num'>{v['best_value']:,.0f}</td>"
                          f"<td class='num'>{v['fastest_hours_out']}h</td><td class='num'>{v['fastest_hours_back']}h</td></tr>"
-                         for k, v in by_route.items()) + "</tbody></table></div>")
-    by_pair = s.get("today", {}).get("by_date_pair", {})
-    if by_pair:
-        parts.append("<h2>By date pair</h2><div class='scroll'><table><thead><tr><th>Out → Back</th>"
-                     "<th class='num'>Best price</th><th class='num'>Best value</th><th>Route</th></tr></thead><tbody>"
-                     + "".join(f"<tr><td>{_e(k.replace('_', ' → '))}</td><td class='num'>{_money(v['best_price'])}</td>"
-                               f"<td class='num'>{v['best_value']:,.0f}</td><td>{_e(v['route'])}</td></tr>"
-                               for k, v in by_pair.items()) + "</tbody></table></div>")
+                         for k, v in sorted(by_route.items(), key=lambda kv: kv[1]['best_value'])) + "</tbody></table></div>")
 
-    parts.append("<h2>JEV second opinion</h2>" + _jev_panel(r.get("jev", {})))
-    if r.get("qantas"):
-        parts.append(qantas_html(r["qantas"]))
+    hist = s.get("history", {})
+    closes = [(c["date"], c["value"]) for c in hist.get("recent_closes", [])]
+    if b:
+        closes.append((run_at.date().isoformat(), b["value_score"]))
+    parts.append("<h3>Best value score by day</h3><div class='card'>" + _sparkline(closes) + "</div>")
+    gh = gi.get("price_history") or []
+    if len(gh) >= 2:
+        pts = [(dt.datetime.fromtimestamp(t_, dt.timezone.utc).date().isoformat(), float(p)) for t_, p in gh
+               if isinstance(t_, (int, float)) and isinstance(p, (int, float))]
+        parts.append("<h3>Google's price history for 21 Dec / 8 Jan</h3><div class='card'>" + _sparkline(pts) + "</div>")
+    tdist = s.get("today", {}).get("price_distribution", {})
+    extra = "".join(f"<tr><td>Today's fares – {_e(k)}</td><td class='num'>{_money(v)}</td></tr>" for k, v in tdist.items())
+    parts.append(_stats_details([("Best value score", hist)], extra))
 
+    # --- Qantas --------------------------------------------------------------------------------
+    if q:
+        parts.append(qantas_html(q))
+
+    # --- data & runs ------------------------------------------------------------------------------
+    parts.append("<h2 id='data'>Data &amp; run details</h2>")
     ut = usage_text(r.get("api_usage"))
-    parts.append("<h2>Providers this run</h2>" + (f"<p class='muted'>{_e(ut)}</p>" if ut else "") + "<div class='scroll'><table><thead><tr><th>Provider</th><th>Status</th>"
-                 "<th class='num'>API calls</th><th class='num'>Itineraries</th><th>Notes</th></tr></thead><tbody>" + "".join(
+    prov = list(r.get("providers", []))
+    if q:
+        prov.append({"provider": "ignav (Qantas section)", "skipped": q.get("status") == "skipped",
+                     "ok": q.get("status") == "ok", "calls": q.get("calls", 0),
+                     "itineraries": sum(len(v) for v in (q.get("options") or {}).values()),
+                     "errors": q.get("errors", [])})
+    fx = r.get("fx") or q.get("fx")
+    notes = [x for x in (ut, (f"USD prices converted at {fx['rates'].get('USD')} ({fx.get('source')}, {_d(fx.get('date'))})"
+                              if fx and fx.get("rates", {}).get("USD") else None)) if x]
+    parts.append("<h3>Sources this run</h3>" + "".join(f"<p class='muted'>{_e(n)}</p>" for n in notes)
+                 + "<div class='scroll'><table><thead><tr><th>Source</th><th>Status</th>"
+                 "<th class='num'>API calls</th><th class='num'>Fares</th><th>Notes</th></tr></thead><tbody>" + "".join(
                      f"<tr><td>{_e(p['provider'])}</td><td>{'skipped' if p['skipped'] else ('ok' if p['ok'] else 'FAILED')}</td>"
                      f"<td class='num'>{p['calls']}</td><td class='num'>{p['itineraries']}</td>"
-                     f"<td style='white-space:normal'>{_e('; '.join(p['errors'][:3]))}</td></tr>"
-                     for p in r.get("providers", [])) + "</tbody></table></div>")
-
+                     f"<td class='wrap'>{_e('; '.join(p['errors'][:3])) or '–'}</td></tr>"
+                     for p in prov) + "</tbody></table></div>")
     if recent_runs:
-        parts.append("<h2>Recent runs</h2><div class='scroll'><table><thead><tr><th>When</th><th>Status</th>"
-                     "<th>Decision</th><th class='num'>Best price</th><th>Route</th><th>Reason</th></tr></thead><tbody>"
-                     + "".join(f"<tr><td>{_e(str(x['run_at'])[:16].replace('T', ' '))}</td><td>{_e(x['status'])}</td>"
-                               f"<td>{_e(x['decision'])}</td><td class='num'>{_money(x['best_price'])}</td>"
-                               f"<td>{_e(x['best_route'])}</td><td style='white-space:normal'>{_e(x['reason'])}</td></tr>"
+        parts.append("<h3>Recent runs</h3><div class='scroll'><table><thead><tr><th>When</th><th>Decision</th>"
+                     "<th class='num'>Best MEL→ELS</th><th class='num'>Qantas return</th><th>Reason</th></tr></thead><tbody>"
+                     + "".join(f"<tr><td>{_d(str(x['run_at']))} {str(x['run_at'])[11:16]}</td><td>{_e(x['decision'])}</td>"
+                               f"<td class='num'>{_money(x['best_price'])}</td>"
+                               f"<td class='num'>{_money((x.get('series') or {}).get('qf_rt'))}</td>"
+                               f"<td class='wrap'>{_e(x['reason'])}</td></tr>"
                                for x in recent_runs) + "</tbody></table></div>")
     if log_lines:
-        parts.append("<h2>Run log</h2><div class='card scroll'><code>" +
-                     "<br>".join(_e(line) for line in log_lines[-30:]) + "</code></div>")
-    parts.append("<p class='muted' style='margin-top:30px'>Fares come only from provider responses; if a provider "
+        parts.append("<details class='card'><summary>Run log</summary><div class='scroll'><code>"
+                     + "<br>".join(_e(line) for line in log_lines[-30:]) + "</code></div></details>")
+    parts.append("<p class='muted' style='margin-top:30px'>Fares come only from provider responses; if a source "
                  "fails, it says so above and nothing is filled in. JSON: <a href='/api/report'>/api/report</a> · "
                  "log: <a href='/api/log'>/api/log</a></p>")
     return _page("".join(parts))
@@ -339,36 +478,35 @@ def _page(body: str) -> str:
 
 
 # --- Qantas SYD <-> JNB section ---------------------------------------------------------------
-QF_STAT_KEYS = ("days_observed", "baseline_value", "all_time_low_value", "all_time_high_value", "mean_value",
-                "stdev_value", "current_zscore", "current_percentile", "is_all_time_low", "slope_7d_aud_per_day",
-                "vs_7d_mean_pct", "volatility_daily_pct", "up_days", "down_days")
-
-
-def _qf_options(rows: list[dict[str, Any]], kind: str) -> str:
+def _qf_options(rows: list[dict[str, Any]], kind: str, empty: str) -> str:
     if not rows:
-        return "<p class='muted'>No Qantas fares returned for this.</p>"
+        return f"<p class='muted'>{_e(empty)}</p>"
     body = []
     for i, o in enumerate(rows, 1):
-        link = f"<a href='{_e(o['booking_link'])}' target='_blank' rel='noopener'>{_e(o.get('link_kind') or 'book')}</a>" if o.get("booking_link") else "–"
-        note = f"<div class='muted' style='font-size:11px'>{_e(o['price_note'])}</div>" if o.get("price_note") else ""
+        link = (f"<a href='{_e(o['booking_link'])}' target='_blank' rel='noopener'>{_e(o.get('link_kind') or 'book')}</a>"
+                if o.get("booking_link") else "–")
+        note = f"<div class='muted small'>{_e(o['price_note'])}</div>" if o.get("price_note") else ""
         if kind == "rt":
-            body.append(f"<tr><td>{i}</td><td class='num'>{_money(o['price_aud'])}{note}</td><td>{_e(o['dates'])}</td>"
-                        f"<td>{_e(o['out']['flights'])}<div class='muted'>{_e(o['out']['route'])} · {o['out']['hours']}h</div></td>"
-                        f"<td>{_e(o['back']['flights'])}<div class='muted'>{_e(o['back']['route'])} · {o['back']['hours']}h</div></td>"
-                        f"<td>{'yes' if o['nonstop_both'] else 'no'}</td><td>{link}</td></tr>")
+            body.append(f"<tr><td>{i}</td><td class='num'>{_money(o['price_aud'])}{note}</td>"
+                        f"<td>{_e(o['out']['flights'])}<div class='muted small'>{_e(o['out']['route'])} · {o['out']['hours']}h</div></td>"
+                        f"<td>{_e(o['back']['flights'])}<div class='muted small'>{_e(o['back']['route'])} · {o['back']['hours']}h</div></td>"
+                        f"<td>{'both ways' if o['nonstop_both'] else ('out only' if o['out']['nonstop'] else ('back only' if o['back']['nonstop'] else 'no'))}</td>"
+                        f"<td>{link}</td></tr>")
         else:
-            body.append(f"<tr><td>{i}</td><td class='num'>{_money(o['price_aud'])}{note}</td><td>{_e(o['date'])}</td>"
-                        f"<td>{_e(o['flights'])}<div class='muted'>{_e(o['route'])}</div></td>"
-                        f"<td class='num'>{o['hours']}h</td><td>{'yes' if o['nonstop'] else 'no'}</td><td>{link}</td></tr>")
-    head = ("<th>#</th><th class='num'>Price</th><th>Dates</th><th>Out</th><th>Back</th><th>Nonstop</th><th>Link</th>"
+            body.append(f"<tr><td>{i}</td><td class='num'>{_money(o['price_aud'])}{note}</td><td>{_d(o['date'])}</td>"
+                        f"<td>{_e(o['flights'])}<div class='muted small'>{_e(o['route'])} · {o['hours']}h</div></td>"
+                        f"<td>{'yes' if o['nonstop'] else 'no'}</td><td>{link}</td></tr>")
+    head = ("<th>#</th><th class='num'>Price</th><th>Out (21 Dec)</th><th>Back (8 Jan)</th><th>Nonstop</th><th>Link</th>"
             if kind == "rt" else
-            "<th>#</th><th class='num'>Price</th><th>Date</th><th>Flights</th><th class='num'>Time</th><th>Nonstop</th><th>Link</th>")
+            "<th>#</th><th class='num'>Price</th><th>Date</th><th>Flights</th><th>Nonstop</th><th>Link</th>")
     return f"<div class='scroll'><table><thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table></div>"
 
 
 def qantas_html(q: dict[str, Any]) -> str:
-    from .qantas import LABELS, SERIES
-    parts = [f"<h2 style='margin-top:40px'>Qantas {_e(q.get('origin', 'SYD'))} ⇄ {_e(q.get('destination', 'JNB'))}</h2>"]
+    from .qantas import LABELS, SERIES, qantas_questions
+    parts = [f"<h2 id='qantas'>Qantas {_e(q.get('origin', 'SYD'))} ⇄ {_e(q.get('destination', 'JNB'))}</h2>",
+             "<p class='muted'>Qantas-only fares between Sydney and Johannesburg on the trip dates – tracked "
+             "separately from the MEL → ELS trip, with its own rules and JEV evaluation.</p>"]
     if q.get("fixture_data"):
         parts.append("<div class='fixture'>FIXTURE DATA – test fares.</div>")
     if q.get("status") in ("skipped", "failed", "no_fares"):
@@ -379,56 +517,72 @@ def qantas_html(q: dict[str, Any]) -> str:
     if d:
         parts.append(f"<div class='card banner'><span class='pill {_e(d['decision'])}'>{_e(d['decision'])}</span>"
                      f"<div>{_e(d['reason'])}" + "".join(f"<div class='muted'>{_e(n)}</div>" for n in d.get("notes", []))
-                     + "<div class='muted'>Rules applied to the Qantas return fare.</div></div></div>")
+                     + "<div class='muted small'>Rules applied to the Qantas return fare.</div></div></div>")
     cur = q.get("series") or {}
     st = q.get("stats") or {}
     ex = st.get("extra") or {}
-    def vs_base(sname):
+
+    def sub(sname):
         h = st.get(sname) or {}
         b, c = h.get("baseline_value"), cur.get(sname)
-        return f"{(c - b) / b * 100:+.1f}% vs day 1" if b and c is not None else "day-1 baseline"
-    tiles = [(LABELS[sname], _money(cur.get(sname)), vs_base(sname)) for sname in SERIES]
+        if c is None:
+            return "no Qantas fare that day"
+        return f"{(c - b) / b * 100:+.1f}% vs day 1" if b and h.get("days_observed", 0) > 1 else "day-1 baseline"
+    names = {"qf_rt": "Return 21 Dec / 8 Jan", "qf_out": "SYD → JNB one-way, 21 Dec", "qf_back": "JNB → SYD one-way, 8 Jan"}
+    tiles = [(names[sn], _money(cur.get(sn)), sub(sn)) for sn in SERIES]
+    if q.get("cheapest_combo"):
+        cc = q["cheapest_combo"]
+        a_, b_ = cc["dates"].split(" → ")
+        tiles.append(("Cheapest return dates", _money(cc["price_aud"]), f"{_d(a_)} → {_d(b_)}"))
     if "return_vs_two_one_ways_aud" in ex:
         v = ex["return_vs_two_one_ways_aud"]
         tiles.append(("Return vs two one-ways", _money(abs(v)),
-                      "return is cheaper" if v > 0 else ("one-ways are cheaper" if v < 0 else "same")))
+                      "the return is cheaper" if v > 0 else ("two one-ways are cheaper" if v < 0 else "same price")))
     if "nonstop_premium_aud" in ex:
-        tiles.append(("Nonstop premium", _money(ex["nonstop_premium_aud"]), "vs connecting Qantas"))
-    if q.get("cheapest_combo"):
-        cc = q["cheapest_combo"]
-        tiles.append(("Cheapest date combo", _money(cc["price_aud"]), cc["dates"]))
+        tiles.append(("Nonstop premium", _money(ex["nonstop_premium_aud"]), "over connecting Qantas"))
     if "qf_rt_vs_main_best_aud" in ex:
         v = ex["qf_rt_vs_main_best_aud"]
-        tiles.append(("QF return vs MEL→ELS best", f"{'+' if v >= 0 else '−'}{_money(abs(v))}",
-                      "SYD–JNB only; excludes MEL & ELS legs"))
-    parts.append("<div class='grid'>" + "".join(
-        f"<div class='card kpi'><div class='l'>{_e(a)}</div><div class='v'>{_e(b)}</div><div class='s'>{_e(c)}</div></div>"
-        for a, b, c in tiles) + "</div>")
+        tiles.append(("Qantas return vs best MEL → ELS", f"{_money(abs(v))} {'less' if v < 0 else 'more'}",
+                      "SYD–JNB only – MEL–SYD and JNB–ELS not included"))
+    parts.append(_kpis(tiles))
     opts = q.get("options") or {}
-    parts.append("<h3>Return – best options</h3>" + _qf_options(opts.get("rt", []), "rt"))
-    parts.append("<h3>SYD → JNB one-way</h3>" + _qf_options(opts.get("out", []), "ow"))
-    parts.append("<h3>JNB → SYD one-way</h3>" + _qf_options(opts.get("back", []), "ow"))
+    parts.append("<h3>Return – best options</h3>" + _qf_options(opts.get("rt", []), "rt", "No Qantas return fares this run."))
+    parts.append("<h3>SYD → JNB one-way – 21 Dec</h3>"
+                 + _qf_options(opts.get("out", []), "ow", "No Qantas one-way fare on 21 Dec this run – see other dates below."))
+    parts.append("<h3>JNB → SYD one-way – 8 Jan</h3>"
+                 + _qf_options(opts.get("back", []), "ow", "No Qantas one-way fare on 8 Jan this run – see other dates below."))
+    out_dates = sorted((q.get("ow_by_date") or {}).get("out", {}) or [])
+    back_dates = sorted((q.get("ow_by_date") or {}).get("back", {}) or [])
+    parts.append("<h3>JEV – Qantas evaluation</h3>"
+                 + _jev_panel(q.get("jev") or {"skipped": True, "error": "not run"},
+                              ["action", "best_outbound_date", "best_return_date", "urgency", "value_rating"]
+                              + list(qantas_questions(out_dates or ["x"], back_dates or ["x"]))))
     if q.get("rt_matrix"):
         m = q["rt_matrix"]
         outs = sorted({k.split("_")[0] for k in m}); rets = sorted({k.split("_")[1] for k in m})
-        rows = "".join(f"<tr><th>{_e(o[5:])}</th>" + "".join(
-            f"<td class='num'>{_money(m.get(f'{o}_{r}'))}</td>" for r in rets) + "</tr>" for o in outs)
-        parts.append("<h3>Return fare by dates (out ↓ / back →)</h3><div class='scroll'><table><thead><tr><th></th>"
-                     + "".join(f"<th class='num'>{_e(r[5:])}</th>" for r in rets) + f"</tr></thead><tbody>{rows}</tbody></table></div>")
+        best = min(m.values())
+        rows = "".join(f"<tr><th>{_d(o)}</th>" + "".join(
+            f"<td class='num{' best' if m.get(f'{o}_{r}') == best else ''}'>{_money(m.get(f'{o}_{r}'))}</td>" for r in rets)
+            + "</tr>" for o in outs)
+        parts.append("<h3>Return fare by dates</h3><p class='muted small'>Rows: SYD → JNB date · columns: JNB → SYD date · "
+                     "cheapest highlighted.</p><div class='scroll'><table><thead><tr><th></th>"
+                     + "".join(f"<th class='num'>{_d(r)}</th>" for r in rets) + f"</tr></thead><tbody>{rows}</tbody></table></div>")
+    obd = q.get("ow_by_date") or {}
+    if obd.get("out") or obd.get("back"):
+        def owrow(side):
+            vals = obd.get(side) or {}
+            return "".join(f"<td>{_d(k)}: <b>{_money(v)}</b></td>" for k, v in vals.items()) or "<td class='muted'>none</td>"
+        parts.append("<h3>One-way fares by date</h3><div class='scroll'><table><tbody>"
+                     f"<tr><th>SYD → JNB</th>{owrow('out')}</tr><tr><th>JNB → SYD</th>{owrow('back')}</tr></tbody></table></div>")
     h = st.get("qf_rt") or {}
     closes = [(c["date"], c["value"]) for c in h.get("recent_closes", [])]
     if cur.get("qf_rt") is not None:
         closes.append(("today", cur["qf_rt"]))
     parts.append("<h3>Qantas return – daily closes</h3><div class='card'>" + _sparkline(closes) + "</div>")
-    head = "".join(f"<th class='num'>{_e(LABELS[sn])}</th>" for sn in SERIES)
-    body = "".join("<tr><td>" + _e(k.replace("_", " ")) + "</td>" + "".join(
-        f"<td class='num'>{_e('–' if (st.get(sn) or {}).get(k) is None else (st.get(sn) or {}).get(k))}</td>" for sn in SERIES)
-        + "</tr>" for k in QF_STAT_KEYS)
-    body += "<tr><td>fare steps (up / down)</td>" + "".join(
+    steps = "<tr><td>Fare steps ≥8% (up / down)</td>" + "".join(
         f"<td class='num'>{(st.get(sn) or {}).get('steps', {}).get('step_ups', '–')} / "
         f"{(st.get(sn) or {}).get('steps', {}).get('step_downs', '–')}</td>" for sn in SERIES) + "</tr>"
-    parts.append(f"<h3>Statistics</h3><div class='scroll'><table><thead><tr><th></th>{head}</tr></thead><tbody>{body}</tbody></table></div>")
-    parts.append("<h3>JEV – Qantas evaluation</h3>" + _jev_panel(q.get("jev") or {"skipped": True, "error": "not run"}))
+    parts.append(_stats_details([(LABELS[sn], st.get(sn) or {}) for sn in SERIES], steps))
     if q.get("note"):
-        parts.append(f"<p class='muted'>{_e(q['note'])}. {q.get('calls', 0)} Ignav calls this run.</p>")
+        parts.append(f"<p class='muted small'>{_e(q['note'])}. {q.get('calls', 0)} Ignav calls this run.</p>")
     return "".join(parts)

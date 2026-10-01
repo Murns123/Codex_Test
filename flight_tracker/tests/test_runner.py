@@ -25,7 +25,7 @@ def test_first_run_sets_baseline(settings):
     assert [o["price_aud"] for o in r["top3"]] == [3420, 3150, 2700]
     assert [o["single_ticket"] for o in r["top3"]] == [True, True, False]
     assert r["flex_searched"] is True
-    assert r["flex_saving"]["dates"] == "20 Dec–08 Jan" and r["flex_saving"]["price_saving"] == 130
+    assert r["flex_saving"]["dates"] == "20 Dec–8 Jan" and r["flex_saving"]["price_saving"] == 130
     assert r["status"] == "fixture" and r["fixture_data"]
     assert "FIXTURE" in r["summary_line"]
     assert headline(r) == "Flight analysis – MEL to ELS | Day 1 – HOLD"
