@@ -567,7 +567,7 @@ def _clocks(now: dt.datetime | None = None) -> str:
 
     def one(cid: str, label: str, t: dt.datetime) -> str:
         return (f"<div class='clock' id='{cid}'><div class='z'>{label}</div>"
-                f"<div class='t'>{t:%H:%M}</div><div class='d'>{t:%a %-d %b} · {t:%Z}</div></div>")
+                f"<div class='t'>{t:%H:%M:%S}</div><div class='d'>{t:%a %-d %b} · {t:%Z}</div></div>")
     return ("<div class='clocks'>" + one("clk-local", "Your time", now.astimezone(ZoneInfo(HOME_TZ)))
             + one("clk-sa", "South Africa", now.astimezone(ZoneInfo(SA_TZ))) + "</div>")
 
@@ -576,11 +576,11 @@ CLOCK_JS = """<script>(function(){
 function zone(tz){try{return new Intl.DateTimeFormat('en-AU',{timeZone:tz,timeZoneName:'short'}).formatToParts(new Date())
 .find(function(p){return p.type==='timeZoneName'}).value}catch(e){return ''}}
 function put(id,tz){var el=document.getElementById(id);if(!el)return;var n=new Date(),o=tz?{timeZone:tz}:{};
-el.querySelector('.t').textContent=n.toLocaleTimeString('en-GB',Object.assign({hour:'2-digit',minute:'2-digit'},o));
+el.querySelector('.t').textContent=n.toLocaleTimeString('en-GB',Object.assign({hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false},o));
 el.querySelector('.d').textContent=n.toLocaleDateString('en-AU',Object.assign({weekday:'short',day:'numeric',month:'short'},o))
 +' · '+(tz==='Africa/Johannesburg'?'SAST':zone(tz||Intl.DateTimeFormat().resolvedOptions().timeZone));}
 function tick(){put('clk-local');put('clk-sa','Africa/Johannesburg');}
-tick();setInterval(tick,15000);})();</script>"""
+function loop(){tick();setTimeout(loop,1000-new Date().getMilliseconds()+5);}loop();})();</script>"""
 
 
 def _page(body: str, hero: str = "", footer: str = "") -> str:
