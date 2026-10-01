@@ -25,7 +25,7 @@ from . import jev as jevmod
 from .config import DecisionConfig, Settings
 from .decision import Point, apply_jev, decide
 from .http import HttpError
-from .models import Itinerary, Leg, OneWay
+from .models import Itinerary, Leg, OneWay, search_link
 from .providers.ignav import IgnavProvider, parse_oneway, parse_response
 from .stats import _quantiles, _r, history_stats
 
@@ -60,13 +60,17 @@ def rt_summary(it: Itinerary) -> dict[str, Any]:
             "price_aud": it.price, "out": _leg_summary(it.outbound), "back": _leg_summary(it.inbound),
             "nonstop_both": it.outbound.stops == 0 and it.inbound.stops == 0,
             "price_note": next((n for n in it.notes if n.startswith("converted")), None),
-            "booking_link": it.booking_link}
+            "booking_link": it.booking_link or search_link(it.outbound.airports[0], it.outbound.airports[-1],
+                                                            it.outbound_date, it.return_date, "Qantas"),
+            "link_kind": "book" if it.booking_link else "search"}
 
 
 def ow_summary(o: OneWay) -> dict[str, Any]:
     return {"date": str(o.date), "price_aud": o.price, **_leg_summary(o.leg),
             "price_note": next((n for n in o.notes if n.startswith("converted")), None),
-            "booking_link": o.booking_link}
+            "booking_link": o.booking_link or search_link(o.leg.airports[0], o.leg.airports[-1], o.date,
+                                                          None, "Qantas"),
+            "link_kind": "book" if o.booking_link else "search"}
 
 
 # --- statistics ---------------------------------------------------------------------------
@@ -336,11 +340,10 @@ def qantas_questions(out_dates: list[str], back_dates: list[str]) -> dict[str, d
                                 "book_one_ways_now": "Book the two Qantas one-ways today.",
                                 "hold": "Wait for the next check."}},
         "urgency": {"type": "score", "instructions": "How urgent is booking the Qantas fare? 1 = no rush, 5 = now.",
-                    "criteria": {"1": "no rush", "2": "low – watch a few more days", "3": "moderate – this week",
-                                 "4": "high – fares turning against us", "5": "book immediately"}},
+                    "criteria": ["1 – no rush", "2 – low: watch a few more days", "3 – moderate: this week",
+                                 "4 – high: fares turning against us", "5 – book immediately"]},
         "value_rating": {"type": "score", "instructions": "Rate today's best Qantas return as value for money.",
-                         "criteria": {"1": "poor", "2": "below average", "3": "fair", "4": "good",
-                                      "5": "excellent"}},
+                         "criteria": ["1 – poor", "2 – below average", "3 – fair", "4 – good", "5 – excellent"]},
     }
     if len(out_dates) > 1:
         qs["best_outbound_date"] = {"type": "choice", "instructions": "Which SYD->JNB date is the best choice?",

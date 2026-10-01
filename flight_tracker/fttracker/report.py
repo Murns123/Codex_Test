@@ -158,7 +158,7 @@ def _options_table(opts: list[dict[str, Any]]) -> str:
         return "<p class='muted'>No fares were retrieved this run, so none are shown.</p>"
     rows = []
     for i, o in enumerate(opts, 1):
-        link = f"<a href='{_e(o['booking_link'])}' target='_blank' rel='noopener'>book</a>" if o.get("booking_link") else "–"
+        link = f"<a href='{_e(o['booking_link'])}' target='_blank' rel='noopener'>{_e(o.get('link_kind') or 'book')}</a>" if o.get("booking_link") else "–"
         flags = []
         if o["too_long"]:
             flags.append("too long")
@@ -349,7 +349,7 @@ def _qf_options(rows: list[dict[str, Any]], kind: str) -> str:
         return "<p class='muted'>No Qantas fares returned for this.</p>"
     body = []
     for i, o in enumerate(rows, 1):
-        link = f"<a href='{_e(o['booking_link'])}' target='_blank' rel='noopener'>book</a>" if o.get("booking_link") else "–"
+        link = f"<a href='{_e(o['booking_link'])}' target='_blank' rel='noopener'>{_e(o.get('link_kind') or 'book')}</a>" if o.get("booking_link") else "–"
         note = f"<div class='muted' style='font-size:11px'>{_e(o['price_note'])}</div>" if o.get("price_note") else ""
         if kind == "rt":
             body.append(f"<tr><td>{i}</td><td class='num'>{_money(o['price_aud'])}{note}</td><td>{_e(o['dates'])}</td>"

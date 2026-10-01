@@ -13,7 +13,7 @@ from . import qantas
 from .classify import classify
 from .config import Settings
 from .decision import Decision, Point, apply_jev, decide, pct_change
-from .models import Itinerary, ProviderResult
+from .models import Itinerary, ProviderResult, search_link
 from .providers import PROVIDERS
 from .providers.fixture import FixtureProvider
 from .scoring import best_single_ticket, score_all
@@ -279,8 +279,8 @@ def _run(settings: Settings, storage: Storage, now: dt.datetime, today: dt.date,
         "dry_run": dry_run,
         "day": decision.day,
         "decision": {k: v for k, v in decision.__dict__.items()},
-        "best": ({**option_summary(best), "booking_link": best.booking_link} if best else None),
-        "top3": [{**option_summary(i), "booking_link": i.booking_link} for i in ranked_primary[:3]],
+        "best": (_with_link(best, settings) if best else None),
+        "top3": [_with_link(i, settings) for i in ranked_primary[:3]],
         "flex_searched": flex_this_run,
         "flex_checked_at": flex_checked_at,
         "google_insights": extras.get("price_insights"),
@@ -326,6 +326,15 @@ def _run(settings: Settings, storage: Storage, now: dt.datetime, today: dt.date,
             fh.write(f"- {line}\n")
     log.info(line)
     return report
+
+
+def _with_link(it: Itinerary, settings: Settings) -> dict[str, Any]:
+    """Option summary plus a link: the provider's booking URL, else a labelled search link."""
+    if it.booking_link:
+        return {**option_summary(it), "booking_link": it.booking_link, "link_kind": "book"}
+    return {**option_summary(it), "link_kind": "search",
+            "booking_link": search_link(settings.trip.origin, settings.trip.destination,
+                                        it.outbound_date, it.return_date)}
 
 
 def summary_line(r: dict[str, Any]) -> str:

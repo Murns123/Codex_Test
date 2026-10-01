@@ -125,3 +125,16 @@ class ProviderResult:
     raw_files: list[str] = field(default_factory=list)
     skipped: bool = False            # not configured (e.g. no key) – not a failure
     extras: dict[str, Any] = field(default_factory=dict)   # e.g. Google price insights, API usage
+
+
+def search_link(origin: str, destination: str, out: dt.date, ret: dt.date | None = None,
+                airline: str | None = None) -> str:
+    """Google Flights search for the same route/dates – used when a provider gives no
+    booking URL. It is a search, not a fare: the price shown there may differ."""
+    from urllib.parse import quote
+    q = f"Flights from {origin} to {destination} on {out.isoformat()}"
+    if ret:
+        q += f" through {ret.isoformat()}"
+    if airline:
+        q += f" on {airline}"
+    return "https://www.google.com/travel/flights?hl=en&gl=au&curr=AUD&q=" + quote(q)

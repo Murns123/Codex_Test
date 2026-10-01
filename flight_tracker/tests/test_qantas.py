@@ -96,6 +96,8 @@ def test_questions_are_well_formed():
         assert v["type"] in ("noul", "choice", "score") and v["instructions"]
         if v["type"] in ("choice", "score"):
             assert len(v["criteria"]) >= 2, k
+        if v["type"] == "score":
+            assert isinstance(v["criteria"], list), k
 
 
 def test_end_to_end_section_in_report_and_history(settings):
