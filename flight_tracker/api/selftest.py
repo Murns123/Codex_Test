@@ -82,40 +82,6 @@ def blob_diag(s):
     return out
 
 
-def brand_scan():
-    """TEMPORARY: read brand colours/fonts from the fixed profserve.net site (no user-supplied URL)."""
-    import re
-    from collections import Counter
-    from urllib.parse import urljoin
-
-    import requests
-    base = "https://profserve.net/"
-    out = {}
-    r = requests.get(base, timeout=20, headers={"User-Agent": "Mozilla/5.0"})
-    html = r.text
-    css_urls = re.findall(r'<link[^>]+rel=["\']?stylesheet["\']?[^>]*href=["\']([^"\']+)', html)[:8]
-    css = html
-    for u in css_urls:
-        try:
-            css += requests.get(urljoin(r.url, u), timeout=15).text[:400000]
-        except Exception:
-            pass
-    hexes = Counter(h.lower() for h in re.findall(r"#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b", css))
-    rgbs = Counter(re.findall(r"rgba?\([^)]{5,40}\)", css))
-    out["status"] = r.status_code
-    out["final_url"] = r.url
-    out["title"] = (re.search(r"<title>(.*?)</title>", html, re.S) or [None, None])[1]
-    out["theme_color"] = re.findall(r'name=["\']theme-color["\'][^>]*content=["\']([^"\']+)', html)
-    out["css_vars"] = dict(re.findall(r"(--[\w-]*(?:color|colour|primary|secondary|accent|brand)[\w-]*)\s*:\s*([^;}{]+)", css)[:40])
-    out["top_hex"] = hexes.most_common(25)
-    out["top_rgb"] = rgbs.most_common(10)
-    out["fonts"] = Counter(f.strip()[:80] for f in re.findall(r"font-family\s*:\s*([^;}{]+)", css)).most_common(8)
-    out["google_fonts"] = re.findall(r"fonts.googleapis.com/css2?\?family=([^\"'&]+)", css)[:5]
-    out["logos"] = [u for u in re.findall(r'<img[^>]+src=["\']([^"\']+)', html) if "logo" in u.lower()][:5]
-    out["stylesheets"] = css_urls
-    return out
-
-
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         s = settings(self.headers)
@@ -148,12 +114,6 @@ class handler(BaseHTTPRequestHandler):
         except Exception as exc:
             out["error"] = f"{type(exc).__name__}: {exc}"
             ok = False
-
-        if q.get("brand") == ["1"]:
-            try:
-                out["brand"] = brand_scan()
-            except Exception as exc:
-                out["brand"] = {"error": f"{type(exc).__name__}: {exc}"}
 
         if q.get("blobdiag") == ["1"]:
             out["blob_diag"] = blob_diag(s)

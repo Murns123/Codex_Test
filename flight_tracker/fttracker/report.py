@@ -126,39 +126,86 @@ def to_text(r: dict[str, Any]) -> str:
 
 # ---------------------------------------------------------------------------------------
 CSS = """
-:root{--bg:#f7f7f5;--card:#fff;--ink:#1d1d1f;--muted:#6b6b70;--line:#e3e3e0;--buy:#0a7d3b;--hold:#8a5a00;
---stop:#555;--warn-bg:#fff4e5;--warn:#8a4b00;--bar:#3867d6;--fix-bg:#ffe8e8;--fix:#a30000}
-@media (prefers-color-scheme:dark){:root{--bg:#141416;--card:#1e1e21;--ink:#ececef;--muted:#9a9aa2;
---line:#303035;--buy:#3ccf7a;--hold:#f0b44c;--stop:#aaa;--warn-bg:#3a2a12;--warn:#f5c27a;--bar:#6c8ff0;
---fix-bg:#4a1717;--fix:#ff9c9c}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);
-font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-main{max-width:1000px;margin:0 auto;padding:20px 16px 60px;overflow-wrap:anywhere}
-h1{font-size:20px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 8px}h3{font-size:14px;margin:20px 0 6px}
-.muted{color:var(--muted)}.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+:root{
+ --navy:#2b2996;--brand:#2d4399;--blue:#008dff;--mid:#4278dd;--steel:#5188cc;--sky:#96baff;
+ --bg:#f3f6fc;--card:#fff;--ink:#141a33;--muted:#5d6687;--line:#e3e8f5;--soft:#eef3ff;
+ --buy:#12a150;--hold:#e08a00;--stop:#6b7280;--bar:var(--blue);
+ --warn-bg:#fff6e6;--warn:#8a5300;--fix-bg:#ffe9ec;--fix:#b4002a;
+ --shadow:0 1px 2px rgba(20,26,51,.06),0 6px 20px rgba(45,67,153,.08)}
+@media (prefers-color-scheme:dark){:root{
+ --bg:#0b1030;--card:#131a45;--ink:#e9edff;--muted:#a3acd6;--line:#232d66;--soft:#1a2357;
+ --buy:#2fd27a;--hold:#ffb02e;--stop:#9ca3af;--bar:#4aa8ff;--warn-bg:#3a2a0e;--warn:#ffc874;
+ --fix-bg:#4a1020;--fix:#ff9fb0;--shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+ font:15px/1.55 Roboto,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+.hero{background:linear-gradient(120deg,var(--navy) 0%,var(--brand) 45%,var(--blue) 100%);color:#fff;
+ padding:26px 16px 58px;position:relative;overflow:hidden}
+.hero:after{content:"";position:absolute;right:-80px;top:-120px;width:420px;height:420px;border-radius:50%;
+ background:radial-gradient(circle,rgba(150,186,255,.35),rgba(150,186,255,0) 70%)}
+.hero .in{max-width:1040px;margin:0 auto;position:relative;z-index:1}
+.brandrow{display:flex;align-items:center;gap:14px}.brandrow>div:last-child{min-width:0}
+.logo{width:46px;height:46px;border-radius:12px;background:rgba(255,255,255,.14);display:grid;place-items:center;
+ box-shadow:inset 0 0 0 1px rgba(255,255,255,.25);flex-shrink:0}
+.hero h1{font-weight:300;font-size:26px;letter-spacing:.2px;margin:0;line-height:1.2}
+.hero h1 b{font-weight:700}
+.hero .sub{opacity:.85;font-size:14px;margin-top:2px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.chip{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22);border-radius:999px;
+ padding:4px 12px;font-size:13px;white-space:nowrap}
+nav{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}
+nav a{color:#fff;text-decoration:none;font-size:13px;font-weight:500;padding:6px 12px;border-radius:999px;
+ background:rgba(11,16,48,.25)}nav a:hover{background:rgba(255,255,255,.22)}
+main{max-width:1040px;margin:0 auto;padding:8px 16px 60px;overflow-wrap:anywhere}
+h2{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.4px;color:var(--brand);
+ margin:40px 0 12px;display:flex;align-items:center;gap:10px}
+h2:after{content:"";flex:1;height:1px;background:var(--line)}
+@media (prefers-color-scheme:dark){h2{color:var(--sky)}}
+h3{font-size:15px;font-weight:500;margin:26px 0 8px}
+.lead{color:var(--muted);margin:-4px 0 14px;font-size:14px}
+.muted{color:var(--muted)}.small{font-size:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow)}
 .banner{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
-.pill{font-weight:700;font-size:22px;padding:6px 16px;border-radius:8px;color:#fff;white-space:nowrap;overflow-wrap:normal;flex-shrink:0}
+.pill{font-weight:700;font-size:15px;letter-spacing:1px;padding:7px 14px;border-radius:999px;color:#fff;
+ white-space:nowrap;overflow-wrap:normal;flex-shrink:0}
 .BUY{background:var(--buy)}.HOLD{background:var(--hold)}.STOP{background:var(--stop)}
-.warn{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:10px 12px;margin:10px 0}
-.fixture{background:var(--fix-bg);color:var(--fix);font-weight:700;border-radius:8px;padding:10px 12px;margin:10px 0}
-.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px}
-th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top;white-space:nowrap}
-th{color:var(--muted);font-weight:600}td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(160px,100%),1fr));gap:12px}
+.warn{background:var(--warn-bg);color:var(--warn);border-radius:12px;padding:10px 14px;margin:12px 0;font-size:14px}
+.fixture{background:var(--fix-bg);color:var(--fix);font-weight:700;border-radius:12px;padding:10px 14px;margin:12px 0}
+.answers{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(290px,100%),1fr));gap:14px;margin-top:-34px;
+ position:relative;z-index:2}
+a.answer{color:inherit;text-decoration:none;display:block;border-top:4px solid var(--mid);
+ transition:transform .15s ease,box-shadow .15s ease}
+a.answer:hover{transform:translateY(-2px);box-shadow:0 2px 4px rgba(20,26,51,.08),0 14px 30px rgba(45,67,153,.16)}
+a.answer.dBUY{border-top-color:var(--buy)}a.answer.dHOLD{border-top-color:var(--hold)}
+.answer .l{color:var(--muted);font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px}
+.answer .row{display:flex;gap:12px;align-items:center;margin-bottom:10px}
+.answer .v{font-size:26px;font-weight:700;letter-spacing:-.3px;font-variant-numeric:tabular-nums}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr));gap:12px;margin-top:12px}
+.kpi{padding:14px 16px}.kpi .l{color:var(--muted);font-size:12px;font-weight:500}
+.kpi .v{font-size:22px;font-weight:700;color:var(--brand);font-variant-numeric:tabular-nums;margin-top:2px}
+@media (prefers-color-scheme:dark){.kpi .v{color:#fff}}
 .kpi .s{color:var(--muted);font-size:12px;margin-top:2px}
-.small{font-size:12px}td.wrap{white-space:normal;min-width:160px}
-nav{display:flex;gap:16px;flex-wrap:wrap;margin:6px 0 4px}nav a{font-size:14px}
-.answers{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:12px}
-a.answer{color:inherit;text-decoration:none;display:block}a.answer:hover{border-color:var(--bar)}
-.answer .l{color:var(--muted);font-size:13px;margin-bottom:8px}.answer .row{display:flex;gap:12px;align-items:center;margin-bottom:8px}
-.answer .v{font-size:20px;font-weight:700}.answer .pill{font-size:18px}
-details{margin-top:14px}summary{cursor:pointer;font-weight:600}td.best{font-weight:700;color:var(--buy)}
-h2{border-top:1px solid var(--line);padding-top:22px}
-.kpi .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}.kpi .l{color:var(--muted);font-size:13px}
-.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;min-width:80px}
-.bar>span{display:block;height:100%;background:var(--bar)}
-a{color:var(--bar)}ul{margin:6px 0;padding-left:20px}code{font-size:13px}
-svg{max-width:100%;height:auto}
+.scroll{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;white-space:nowrap}
+tbody tr:last-child td,tbody tr:last-child th{border-bottom:0}
+thead th{color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.8px;background:var(--soft)}
+tbody tr:hover{background:var(--soft)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}td.wrap{white-space:normal;min-width:160px}
+td.best{font-weight:700;color:var(--buy)}
+.bar{height:8px;background:var(--soft);border-radius:4px;overflow:hidden;min-width:90px}
+.bar>span{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--mid),var(--blue))}
+details{margin-top:14px}summary{cursor:pointer;font-weight:500;color:var(--brand)}
+@media (prefers-color-scheme:dark){summary{color:var(--sky)}}
+details[open] summary{margin-bottom:10px}details .scroll{box-shadow:none}
+a{color:var(--blue)}ul{margin:6px 0;padding-left:20px}ul li{margin:4px 0}code{font-size:12.5px}
+.suggest{list-style:none;padding:0;display:grid;gap:8px}
+.suggest li{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:10px;
+ padding:10px 14px;box-shadow:var(--shadow);margin:0}
+svg{max-width:100%;height:auto;display:block}
+footer{max-width:1040px;margin:0 auto;padding:22px 16px 40px;color:var(--muted);font-size:13px;border-top:1px solid var(--line)}
+footer b{color:var(--ink);font-weight:500}
+@media (max-width:600px){.hero{padding-bottom:46px}.hero h1{font-size:21px}.chip{white-space:normal}.answers{margin-top:-24px}.answer .v{font-size:22px}}
 """
 
 
@@ -273,10 +320,15 @@ def _sparkline(points: list[tuple[str, float]], w: int = 640, h: int = 140) -> s
     xs = [pad + i * (w - 2 * pad) / (len(vals) - 1) for i in range(len(vals))]
     ys = [h - pad - (v - lo) / span * (h - 2 * pad) for v in vals]
     path = " ".join(f"{'M' if i == 0 else 'L'}{x:.1f},{y:.1f}" for i, (x, y) in enumerate(zip(xs, ys)))
-    dots = "".join(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='3' fill='var(--bar)'><title>{_e(d)}: {v:,.0f}</title></circle>"
+    dots = "".join(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='3.5' fill='var(--card)' stroke='var(--bar)' stroke-width='2'><title>{_e(d)}: {v:,.0f}</title></circle>"
                    for (d, v), x, y in zip(points, xs, ys))
-    return (f"<svg viewBox='0 0 {w} {h}' role='img' aria-label='Best value score by day'>"
-            f"<path d='{path}' fill='none' stroke='var(--bar)' stroke-width='2'/>{dots}"
+    gid = f"g{abs(hash(tuple(vals))) % 10**6}"
+    area = path + f" L{xs[-1]:.1f},{h - pad} L{xs[0]:.1f},{h - pad} Z"
+    return (f"<svg viewBox='0 0 {w} {h}' role='img' aria-label='Trend by day'>"
+            f"<defs><linearGradient id='{gid}' x1='0' y1='0' x2='0' y2='1'>"
+            "<stop offset='0' stop-color='#008dff' stop-opacity='.28'/><stop offset='1' stop-color='#008dff' stop-opacity='0'/>"
+            f"</linearGradient></defs><path d='{area}' fill='url(#{gid})'/>"
+            f"<path d='{path}' fill='none' stroke='var(--bar)' stroke-width='2.5' stroke-linejoin='round'/>{dots}"
             f"<text x='{pad}' y='14' fill='var(--muted)' font-size='11'>{hi:,.0f}</text>"
             f"<text x='{pad}' y='{h - 6}' fill='var(--muted)' font-size='11'>{lo:,.0f}</text></svg>")
 
@@ -336,7 +388,7 @@ def _decision_card(title: str, anchor: str, d: dict[str, Any] | None, price: str
     if not d:
         return (f"<a class='card answer' href='#{anchor}'><div class='l'>{_e(title)}</div>"
                 "<div class='muted'>Not run.</div></a>")
-    return (f"<a class='card answer' href='#{anchor}'><div class='l'>{_e(title)}</div>"
+    return (f"<a class='card answer d{_e(d['decision'])}' href='#{anchor}'><div class='l'>{_e(title)}</div>"
             f"<div class='row'><span class='pill {_e(d['decision'])}'>{_e(d['decision'])}</span>"
             f"<div><div class='v'>{_e(price)}</div><div class='muted small'>{_e(price_label)}</div></div></div>"
             f"<div class='small'>{_e(d['reason'])}</div><div class='muted small'>{_e(_jev_line(j))}</div></a>")
@@ -358,12 +410,20 @@ def to_html(r: dict[str, Any] | None, recent_runs: list[dict[str, Any]] | None =
     q = r.get("qantas") or {}
     run_at = dt.datetime.fromisoformat(r["run_at"])
     b = r.get("best")
-    parts = [f"<h1>MEL → East London flight tracker · Day {_e(r.get('day') or '–')}</h1>",
-             f"<p class='muted'>Last run {run_at:%a %-d %b %Y, %H:%M} Melbourne time · "
-             f"next runs 07:00, 12:00 and 17:00</p>",
-             "<nav><a href='#trip'>MEL → ELS trip</a>"
-             + "".join(f"<a href='#route-{_e(n)}'>{_e(_section_meta(sec)[5])}</a>" for n, sec in (r.get("routes") or {}).items())
-             + ("<a href='#qantas'>Qantas SYD ⇄ JNB</a>" if q else "") + "<a href='#data'>Data &amp; runs</a></nav>"]
+    cal0 = (r.get("stats") or {}).get("calendar", {})
+    hero = (f"<header class='hero'><div class='in'><div class='brandrow'><div class='logo'>{LOGO}</div>"
+            f"<div><h1>Murn's <b>Melbourne SA</b> Flight Tracker</h1>"
+            "<div class='sub'>Melbourne → East London · 21 Dec 2026 – 8 Jan 2027 · 1 adult economy</div></div></div>"
+            "<div class='chips'>"
+            f"<span class='chip'>Day {_e(r.get('day') or '–')} of tracking</span>"
+            f"<span class='chip'>Last run {run_at:%a %-d %b, %H:%M}</span>"
+            f"<span class='chip'>{_e(cal0.get('days_to_book_by', '–'))} days to book-by (14 Oct)</span>"
+            "<span class='chip'>Runs 07:00 · 12:00 · 17:00</span></div>"
+            "<nav><a href='#trip'>MEL → ELS trip</a>"
+            + "".join(f"<a href='#route-{_e(n)}'>{_e(_section_meta(sec)[5])}</a>" for n, sec in (r.get("routes") or {}).items())
+            + ("<a href='#qantas'>Qantas SYD ⇄ JNB</a>" if q else "") + "<a href='#data'>Data &amp; runs</a></nav>"
+            "</div></header>")
+    parts: list[str] = []
     if r.get("fixture_data"):
         parts.append("<div class='fixture'>FIXTURE DATA – these are test fares, not real prices.</div>")
 
@@ -376,7 +436,7 @@ def to_html(r: dict[str, Any] | None, recent_runs: list[dict[str, Any]] | None =
                               _money((sec.get("series") or {}).get(S[0])),
                               f"{airline + ' only' if airline else 'any airline'} · 21 Dec / 8 Jan · "
                               f"excludes the domestic leg", sec.get("jev"))
-    parts.append("<h2>Today's answers</h2><div class='answers'>"
+    parts.append("<div class='answers'>"
                  + _decision_card("MEL → ELS trip (21 Dec / 8 Jan)", "trip", d,
                                   _money(b["price_aud"]) if b else "no fares",
                                   f"best single ticket · route {b['route']}" if b else "", r.get("jev"))
@@ -408,7 +468,7 @@ def to_html(r: dict[str, Any] | None, recent_runs: list[dict[str, Any]] | None =
         ("Days to book-by", cal.get("days_to_book_by", "–"), "14 Oct 2026"),
     ]))
     parts.append("<h3>Top 3 options – 21 Dec / 8 Jan</h3>" + _options_table(r.get("top3", [])))
-    parts.append("<h3>Suggestions</h3><ul>" + "".join(f"<li>{_e(x)}</li>" for x in r.get("suggestions", [])) + "</ul>")
+    parts.append("<h3>Suggestions</h3><ul class='suggest'>" + "".join(f"<li>{_e(x)}</li>" for x in r.get("suggestions", [])) + "</ul>")
     parts.append("<h3>JEV second opinion</h3>" + _jev_panel(r.get("jev", {}), list(QUESTIONS)))
 
     by_pair = s.get("today", {}).get("by_date_pair", {})
@@ -480,17 +540,37 @@ def to_html(r: dict[str, Any] | None, recent_runs: list[dict[str, Any]] | None =
     if log_lines:
         parts.append("<details class='card'><summary>Run log</summary><div class='scroll'><code>"
                      + "<br>".join(_e(line) for line in log_lines[-30:]) + "</code></div></details>")
-    parts.append("<p class='muted' style='margin-top:30px'>Fares come only from provider responses; if a source "
-                 "fails, it says so above and nothing is filled in. JSON: <a href='/api/report'>/api/report</a> · "
-                 "log: <a href='/api/log'>/api/log</a></p>")
-    return _page("".join(parts))
+    parts.append("<p class='muted small' style='margin-top:24px'>Fares come only from provider responses; if a "
+                 "source fails, it says so above and nothing is filled in. Raw data: <a href='/api/report'>/api/report</a>"
+                 " · log: <a href='/api/log'>/api/log</a></p>")
+    return _page("".join(parts), hero)
 
 
-def _page(body: str) -> str:
+BRAND = "Murn's Melbourne SA Flight Tracker"
+LOGO = ("<svg width='26' height='26' viewBox='0 0 24 24' fill='none' aria-hidden='true'>"
+        "<path d='M2.5 19h19' stroke='#96baff' stroke-width='1.6' stroke-linecap='round'/>"
+        "<path d='M21 8.5c-.4-1-1.7-1.3-2.7-.8L13.6 10 6.9 6.3 4.8 7.2l4.6 4.2-3.3 1.6-2.2-1.2-1.4.6 2.4 3"
+        " .9.4 4-1.7 4.6-2 4.8-2.1c1-.5 1.3-1.4.8-2.3z' fill='#fff'/></svg>")
+
+
+def _page(body: str, hero: str = "", footer: str = "") -> str:
+    hero = hero or (f"<header class='hero'><div class='in'><div class='brandrow'><div class='logo'>{LOGO}</div>"
+                    f"<div><h1>{_e(BRAND)}</h1><div class='sub'>Melbourne → East London fare intelligence</div>"
+                    "</div></div></div></header>")
     return ("<!doctype html><html lang='en'><head><meta charset='utf-8'>"
             "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-            "<title>MEL → ELS tracker</title>"
-            f"<style>{CSS}</style></head><body><main>{body}</main></body></html>")
+            f"<title>{_e(BRAND)}</title><meta name='theme-color' content='#2d4399'>"
+            "<link rel='icon' href=\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E"
+            "%3Crect width='24' height='24' rx='6' fill='%232d4399'/%3E%3Cpath d='M20 9c-.4-1-1.6-1.2-2.5-.8L13 10.3 "
+            "7 7l-2 .8 4.3 3.9-3 1.5-2-1.1-1.3.6 2.2 2.8.9.4 3.7-1.6 4.3-1.9 4.4-1.9c.9-.4 1.2-1.3.7-2.2z' "
+            "fill='white'/%3E%3C/svg%3E\">"
+            "<link rel='preconnect' href='https://fonts.googleapis.com'>"
+            "<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>"
+            "<link href='https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap' rel='stylesheet'>"
+            f"<style>{CSS}</style></head><body>{hero}<main>{body}</main>"
+            + (footer or f"<footer><b>{_e(BRAND)}</b> · fares from Ignav and Google Flights · decisions by rules with a "
+                         "JEV second opinion</footer>")
+            + "</body></html>")
 
 
 # --- Qantas SYD <-> JNB section ---------------------------------------------------------------
@@ -536,7 +616,7 @@ def route_html(q: dict[str, Any], anchor: str) -> str:
     al = f"{airline} " if airline else ""
     scope = (f"{airline}-only fares" if airline else "Fares on any airline")
     parts = [f"<h2 id='{_e(anchor)}'>{_e(title)}</h2>",
-             f"<p class='muted'>{scope} between {_e(org)} and {_e(dst)} on the trip dates – the domestic "
+             f"<p class='lead'>{scope} between {_e(org)} and {_e(dst)} on the trip dates – the domestic "
              "connection to East London is not included. Tracked separately from the MEL → ELS trip, with its "
              "own rules and JEV evaluation.</p>"]
     if q.get("fixture_data"):

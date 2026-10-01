@@ -1,4 +1,6 @@
-# MEL → ELS flight price tracker
+# Murn's Melbourne SA Flight Tracker
+
+Branded with the ProfServe palette (navy `#2b2996`, blue `#2d4399`, bright blue `#008dff`, sky `#96baff`) and Roboto; dark mode follows the device setting.
 
 Tracks one trip, Melbourne (MEL) to East London (ELS) and back, economy, 1 adult, AUD. It runs 3 times a
 day on Vercel and tells you whether to **BUY** or **HOLD**.

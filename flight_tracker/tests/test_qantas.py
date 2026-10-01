@@ -160,6 +160,6 @@ def test_report_has_three_answers_and_series_kept_apart(settings):
     assert mj["stats"]["mj_rt"]["days_observed"] == 2
     assert "MEL-JNB return AUD 2,980" in r["summary_line"]
     page = to_html(r)
-    assert page.count("class='card answer'") == 3
+    assert page.count("class='card answer") == 3
     assert "MEL ⇄ JNB (any airline)" in page and "Cheapest return by airline" in page
     assert "domestic" in page
