@@ -101,7 +101,7 @@ def test_questions_are_well_formed():
 
 
 def test_end_to_end_section_in_report_and_history(settings):
-    run(settings, now=at(1, 17), fixtures=FIX)
+    run(settings, now=at(1, 7), fixtures=FIX)   # Qantas date grid: morning run
     r = run(settings, now=at(2, 17), fixtures=FIX)
     q = r["qantas"]
     assert r["series"]["qf_rt"] == 2650

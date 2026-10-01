@@ -145,3 +145,26 @@ def test_ignav_real_shape_with_usd_conversion():
 def test_ignav_usd_without_rate_is_left_out():
     its, problems = parse_response(REAL_SHAPE, OUT, RET, "AUD", None)
     assert its == [] and "no USD->AUD rate" in problems[0]
+
+
+def test_ignav_retries_empty_and_failed_pairs_once(settings, monkeypatch):
+    from fttracker.providers import ignav
+    settings.env["IGNAV_API_KEY"] = "k"
+    payload = json.loads(FIX.read_text())["2026-12-21_2027-01-08"]
+    seen = []
+
+    def fake(method, url, json=None, **kw):
+        key = json["departure_date"]
+        seen.append(key)
+        if key == "2026-12-19":                          # 19 Dec: empty first time, fares second time
+            n = seen.count(key)
+            return {"itineraries": []} if n == 1 else payload
+        raise HttpError("HTTP 424: upstream_error")      # everything else keeps failing
+
+    monkeypatch.setattr(ignav, "request_json", fake)
+    p = ignav.IgnavProvider(settings, lambda label, data: label)
+    res = p.search([(dt.date(2026, 12, 19), RET), (dt.date(2026, 12, 20), RET)])
+    assert res.calls == 4                                 # 2 pairs + 1 retry each
+    assert len(res.itineraries) == 3                       # 19 Dec filled in on the retry
+    fails = [e for e in res.errors if "424" in e]
+    assert len(fails) == 1 and fails[0].startswith("20 Dec")   # still reported, nothing invented

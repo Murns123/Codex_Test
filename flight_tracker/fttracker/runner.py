@@ -103,7 +103,9 @@ def suggestions(best: Itinerary | None, its: list[Itinerary], tstats: dict[str, 
            (best.outbound.hours + best.inbound.hours) - 3]
     if alt:
         a = min(alt, key=lambda i: i.price)
-        out.append(f"Route {a.route} is only AUD {a.price - best.price:,.0f} more and about "
+        diff = a.price - best.price
+        cost = f"AUD {abs(diff):,.0f} cheaper" if diff < 0 else ("the same price" if diff == 0 else f"only AUD {diff:,.0f} more")
+        out.append(f"Route {a.route} is {cost} and about "
                    f"{(best.outbound.hours + best.inbound.hours) - (a.outbound.hours + a.inbound.hours):.0f}h "
                    "quicker in total – worth a look.")
     risk = jev_answers.get("connection_risk_high")
@@ -115,6 +117,18 @@ def suggestions(best: Itinerary | None, its: list[Itinerary], tstats: dict[str, 
     out.append("When booking, make sure the East London leg is on the same booking reference, so a delay "
                "into Johannesburg is the airline's problem to fix.")
     return out[:3]
+
+
+FLEX_SLOTS = {"morning": (0, 10), "midday": (10, 15), "evening": (15, 24)}
+
+
+def _flex_slot_now(now: dt.datetime, slot: str | None, default_from_hour: int) -> bool:
+    """Is this run the one where a section searches its flex dates? slot = morning/midday/evening;
+    unset = same rule as the main trip (hour >= flex_from_hour)."""
+    if slot in FLEX_SLOTS:
+        lo, hi = FLEX_SLOTS[slot]
+        return lo <= now.hour < hi
+    return now.hour >= default_from_hour
 
 
 def run(settings: Settings, *, now: dt.datetime | None = None, dry_run: bool = False,
@@ -310,7 +324,11 @@ def _run(settings: Settings, storage: Storage, now: dt.datetime, today: dt.date,
     payload = json.loads(fixtures.read_text()) if fixtures else None
     report["timings"] = {"main_s": round(time.monotonic() - t0, 1)}
     budget = float(settings.trip.flex_time_budget_s)
+    prev_report = storage.latest_report() or {}
     for name, cfg, prefix in sections:
+        prev_sec = prev_report.get("qantas") if name == "qantas" else (prev_report.get("routes") or {}).get(name)
+        # each section searches its flex grid at its own run of the day (spreads the Ignav load)
+        flex_this_run = _flex_slot_now(now, cfg.get("flex_run"), settings.trip.flex_from_hour)
         # Vercel stops a function at 300s: once past the budget, later sections check the
         # primary dates only rather than risk the whole run being killed.
         sec_flex = flex_this_run and (time.monotonic() - t0) < budget
@@ -322,7 +340,7 @@ def _run(settings: Settings, storage: Storage, now: dt.datetime, today: dt.date,
                 settings, now=now, flex_this_run=sec_flex, history_rows=history_rows, save_raw=save_raw,
                 fetch=qantas.fixture_fetch(payload, prefix) if payload is not None else None,
                 main_best=report["best"], fixture=bool(fixtures),
-                cfg=None if name == "qantas" else cfg, prefix=prefix)
+                cfg=None if name == "qantas" else cfg, prefix=prefix, prev=prev_sec)
         except Exception as exc:
             log.exception("%s section failed", name)
             section = {"enabled": True, "status": "failed", "errors": [f"crashed: {exc}"], "calls": 0,

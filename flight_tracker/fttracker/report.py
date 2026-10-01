@@ -728,7 +728,9 @@ def route_html(q: dict[str, Any], anchor: str) -> str:
         rows = "".join(f"<tr><th>{_d(o)}</th>" + "".join(
             f"<td class='num{' best' if m.get(f'{o}_{r}') == best else ''}'>{_money(m.get(f'{o}_{r}'))}</td>" for r in rets)
             + "</tr>" for o in outs)
-        parts.append(f"<h3>Return fare by dates</h3><p class='muted small'>Rows: {_e(org)} → {_e(dst)} date · columns: {_e(dst)} → {_e(org)} date · "
+        ck = q.get("flex_checked_at") or ""
+        when = (f" · checked {_d(ck)} {ck[11:16]}" if ck and not q.get("flex_searched") else "")
+        parts.append(f"<h3>Return fare by dates (±2 days)</h3><p class='muted small'>Rows: {_e(org)} → {_e(dst)} date · columns: {_e(dst)} → {_e(org)} date{when} · "
                      "cheapest highlighted.</p><div class='scroll'><table><thead><tr><th></th>"
                      + "".join(f"<th class='num'>{_d(r)}</th>" for r in rets) + f"</tr></thead><tbody>{rows}</tbody></table></div>")
     obd = q.get("ow_by_date") or {}

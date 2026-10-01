@@ -98,7 +98,7 @@ dates and leaves out the domestic Johannesburg → East London connection. It's 
 - A comparison with the full MEL → ELS best fare.
 - A "preferred airline" choice for JEV, in place of the Qantas nonstop question.
 
-**Cost:** it tracks return fares only, which is 1 Ignav call on normal runs and 25 on the 17:00 run (±2-day grid).
+**Cost:** it tracks return fares only, which is 1 Ignav call on normal runs and 25 on the midday run, when it searches its ±2-day grid (`flex_run: midday`).
 Setting `routes.mel_jnb.one_way: true` adds one-ways.
 
 **Adding another route:** add an entry under `routes:` in config.yaml with an origin, destination,
@@ -151,8 +151,8 @@ It answers 16–18 questions:
 
 As in the main tracker, JEV can only upgrade a HOLD to a BUY, from day 3 at P ≥ 0.80.
 
-**Cost:** Ignav, using `airlines_include: ["QF"]`, takes 3 calls on the 07:00 and 12:00 runs and 35
-on the 17:00 run (25 return date pairs + 10 one-way dates), so about 41 calls a day. Add one JEV call
+**Cost:** Ignav, using `airlines_include: ["QF"]`, takes 3 calls on the midday and evening runs and 35
+on the morning run (`flex_run: morning`) (25 return date pairs + 10 one-way dates), so about 41 calls a day. Add one JEV call
 per run. If Ignav rejects the airline filter, the request is retried without it and the results are
 filtered locally.
 
@@ -260,7 +260,7 @@ earlier runs carry that result forward, showing when it was last checked.
 
 | Service | Calls per run | Per day (3 runs) | Oct 1 → 31 |
 |---|---|---|---|
-| Ignav | 5 on morning and midday runs (1 MEL→ELS + 1 MEL⇄JNB + 3 Qantas); ~85 on the 17:00 run (25 date pairs each for MEL→ELS and MEL⇄JNB, 35 for Qantas) | ~95 | ~2,900 |
+| Ignav | 5 on morning and midday runs (1 MEL→ELS + 1 MEL⇄JNB + 3 Qantas); the ±2-day grids are spread over the day – morning: Qantas (35), midday: MEL⇄JNB (25), evening: MEL→ELS (25); empty or failed pairs are retried once | ~95–110 | ~3,000–3,400 |
 | Google Flights (SerpApi) | 2 per run, primary dates only (1 search + 1 return-leg expansion) | 6 | ~186 (Free plan: 250/month) |
 | JEV (optional) | 1 (~8–15k input tokens: stats + top 10 options) | 3 | ~93 |
 | Vercel + Blob | 1 function run (the 17:00 run is the longest; past `trip.flex_time_budget_s`, 170s, later sections skip flex dates); ~10–20 small JSON writes | ~50 | Hobby free tier normally covers this |

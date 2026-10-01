@@ -32,7 +32,7 @@ from .config import DecisionConfig, Settings
 from .decision import Point, apply_jev, decide
 from .http import HttpError
 from .models import Itinerary, Leg, OneWay, search_link
-from .providers.ignav import IgnavProvider, parse_oneway, parse_response
+from .providers.ignav import IgnavProvider, _items, parse_oneway, parse_response
 from .stats import _quantiles, _r, history_stats
 
 log = logging.getLogger(__name__)
@@ -127,7 +127,8 @@ def default_fetch(settings: Settings, cfg: dict[str, Any] | None = None) -> Fetc
 def run_section(settings: Settings, *, now: dt.datetime, flex_this_run: bool, history_rows: list[dict[str, Any]],
                 save_raw: Callable[[str, Any], str], fetch: Fetch | None = None,
                 main_best: dict[str, Any] | None = None, fixture: bool = False,
-                cfg: dict[str, Any] | None = None, prefix: str = "qf") -> dict[str, Any]:
+                cfg: dict[str, Any] | None = None, prefix: str = "qf",
+                prev: dict[str, Any] | None = None) -> dict[str, Any]:
     q = cfg if cfg is not None else settings.qantas
     carrier = q.get("carrier") if cfg is not None else q.get("carrier", "QF")
     airline = q.get("airline_name") or ({"QF": "Qantas"}.get(carrier, carrier) if carrier else None)
@@ -143,6 +144,7 @@ def run_section(settings: Settings, *, now: dt.datetime, flex_this_run: bool, hi
                            "fixture_data": fixture}
     if not fixture and not settings.env.get("IGNAV_API_KEY"):
         return {**out, "status": "skipped", "errors": ["IGNAV_API_KEY is not set"]}
+    fetch_is_live = fetch is None
     fetch = fetch or default_fetch(settings, q)
     ignav = IgnavProvider(settings, save_raw)
     t = settings.trip
@@ -178,6 +180,13 @@ def run_section(settings: Settings, *, now: dt.datetime, flex_this_run: bool, hi
 
     with ThreadPoolExecutor(max_workers=int(q.get("concurrency", 4))) as pool:
         results = list(pool.map(call, jobs))
+        # retry upstream errors and empty answers once (Ignav sometimes fills them on a second try)
+        redo = [i for i, (_, payload, err) in enumerate(results) if payload is None or not _items(payload)]
+        if redo and fetch_is_live and q.get("retry_empty", True):
+            for i, again in zip(redo, pool.map(call, [jobs[i] for i in redo])):
+                out["calls"] += 1
+                if again[1] is not None and (_items(again[1]) or results[i][1] is None):
+                    results[i] = again
 
     from .models import ProviderResult
     fxres = ProviderResult(provider="ignav", ok=True)
@@ -241,10 +250,18 @@ def run_section(settings: Settings, *, now: dt.datetime, flex_this_run: bool, hi
         out["ow_by_date"] = {
             side: {str(d): min(o.price for o in ows[side] if o.date == d)
                    for d in sorted({o.date for o in ows[side]})} for side in ("out", "back")}
-        if matrix:
-            k, v = min(matrix.items(), key=lambda kv: kv[1])
-            out["cheapest_combo"] = {"dates": k.replace("_", " → "), "price_aud": v,
-                                     "saving_vs_primary": _r(current[S[0]] - v) if current[S[0]] else None}
+        out["flex_checked_at"] = now.isoformat()
+    elif prev and prev.get("rt_matrix") is not None:
+        # not this section's flex run: show the last full date check, with today's primary fare
+        out["rt_matrix"] = dict(prev["rt_matrix"])
+        if current[S[0]] is not None:
+            out["rt_matrix"][f"{t.outbound}_{t.return_date}"] = current[S[0]]
+        out["ow_by_date"] = prev.get("ow_by_date") or {"out": {}, "back": {}}
+        out["flex_checked_at"] = prev.get("flex_checked_at")
+    if out.get("rt_matrix"):
+        k, v = min(out["rt_matrix"].items(), key=lambda kv: kv[1])
+        out["cheapest_combo"] = {"dates": k.replace("_", " → "), "price_aud": v,
+                                 "saving_vs_primary": _r(current[S[0]] - v) if current[S[0]] else None}
 
     # --- statistics ---------------------------------------------------------------------------
     today = now.date()
@@ -322,7 +339,10 @@ def run_section(settings: Settings, *, now: dt.datetime, flex_this_run: bool, hi
                        "backoff_base_s": float(settings.http.get("backoff_base_s", 2)), "timeout_s": 90}
         model = settings.env.get("JEV_MODEL") or jcfg.get("model", "jev-latest")
         carriers = list(extra.get("cheapest_by_airline", {}))
-        questions = route_questions([str(d) for d in sorted({*out_dates})], [str(d) for d in sorted({*back_dates})],
+        mx = out.get("rt_matrix") or {}
+        q_out = sorted({*map(str, out_dates), *(k.split("_")[0] for k in mx)})
+        q_back = sorted({*map(str, back_dates), *(k.split("_")[1] for k in mx)})
+        questions = route_questions(q_out, q_back,
                                     org, dst, airline, one_way=out["one_way"], carriers=carriers if not carrier else [])
         jev_res = jevmod.evaluate(state, settings.env["JEV_API_KEY"], model, http_kwargs, questions,
                                   buy_choices=("book_return_now", "book_one_ways_now"))

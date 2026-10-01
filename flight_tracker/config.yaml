@@ -52,7 +52,10 @@ jev:
 
 # Generic route sections – same engine as the Qantas section, any airline. The domestic
 # JNB -> ELS connection is deliberately left out. Return fares only by default (1 Ignav call
-# on normal runs, 7 on the flex run); set one_way: true to also track one-ways.
+# on normal runs, 25 on its flex run); set one_way: true to also track one-ways.
+# flex_run picks which daily run searches the +/-2 day grid: morning (06/07:00), midday
+# (11/12:00) or evening (16/17:00, same as the main trip). Spreading them keeps each run well
+# inside Vercel's 300s limit; between checks the dashboard shows the last grid.
 routes:
   mel_jnb:
     enabled: true
@@ -62,6 +65,7 @@ routes:
     destination: JNB
     carrier: null               # null = any airline
     one_way: false
+    flex_run: midday
     concurrency: 6
     step_jump_pct: 8
     decision:
@@ -74,8 +78,8 @@ routes:
       min_days_before_upgrade: 3
 
 # Qantas SYD <-> JNB section: return + one-way each direction, Qantas only, same dates as
-# the trip (flex dates on the daily flex run). Uses Ignav: 3 calls on normal runs, up to 15
-# on the flex run (~21/day). Own rules + its own JEV question set.
+# the trip (+/-2 day grid on the morning run). Uses Ignav: 3 calls on normal runs, up to 35
+# on its flex run (~41/day). Own rules + its own JEV question set.
 qantas:
   enabled: true
   origin: SYD
@@ -84,6 +88,7 @@ qantas:
   one_way: true                 # also track SYD->JNB and JNB->SYD one-ways
   airline_filter_in_request: true   # send airlines_include: [QF]; results are filtered locally too
   one_way_endpoint: /fares/one-way
+  flex_run: morning
   concurrency: 6
   step_jump_pct: 8              # day-on-day move counted as a fare "step" (bucket change)
   decision:                     # applied to the return fare

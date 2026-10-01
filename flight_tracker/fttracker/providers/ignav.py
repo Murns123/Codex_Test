@@ -338,6 +338,14 @@ class IgnavProvider(FareProvider):
         workers = max(1, int(self.cfg.get("concurrency", 4)))
         with ThreadPoolExecutor(max_workers=workers) as pool:
             fetched = list(pool.map(fetch, pairs))
+            # Ignav sometimes answers a date pair with an upstream error or an empty list that
+            # a second try fills in – retry those once
+            redo = [i for i, (_, payload, err) in enumerate(fetched) if err is not None or not _items(payload)]
+            if redo and self.cfg.get("retry_empty", True):
+                for i, again in zip(redo, pool.map(fetch, [pairs[i] for i in redo])):
+                    res.calls += 1
+                    if again[2] is None and (_items(again[1]) or fetched[i][2] is not None):
+                        fetched[i] = again
 
         succeeded = 0
         for (out_date, ret_date), (body, payload, err) in zip(pairs, fetched):

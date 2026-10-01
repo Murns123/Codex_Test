@@ -100,12 +100,25 @@ def test_flex_window_is_plus_minus_two_days_full_grid(settings):
     assert {b for _, b in pairs} == {dt.date(2027, 1, d) for d in range(6, 11)}
 
 
+def test_each_section_searches_flex_dates_at_its_own_run(settings):
+    r7 = run(settings, now=at(1, 7), fixtures=FIX)
+    assert r7["qantas"]["flex_searched"] and not r7["routes"]["mel_jnb"]["flex_searched"]
+    assert not r7["flex_searched"]
+    r12 = run(settings, now=at(1, 12), fixtures=FIX)
+    assert r12["routes"]["mel_jnb"]["flex_searched"] and not r12["qantas"]["flex_searched"]
+    r17 = run(settings, now=at(1, 17), fixtures=FIX)
+    assert r17["flex_searched"]
+    assert not r17["qantas"]["flex_searched"] and not r17["routes"]["mel_jnb"]["flex_searched"]
+    # between checks each section keeps showing its last full date grid
+    for sec, checked in ((r17["qantas"], r7["qantas"]), (r17["routes"]["mel_jnb"], r12["routes"]["mel_jnb"])):
+        assert sec["flex_checked_at"] == checked["flex_checked_at"]
+        assert set(sec["rt_matrix"]) == set(checked["rt_matrix"]) and sec["cheapest_combo"]
+
+
 def test_time_budget_drops_flex_for_later_sections(settings):
     import dataclasses
     settings.trip = dataclasses.replace(settings.trip, flex_time_budget_s=0)
-    r = run(settings, now=at(1), fixtures=FIX)
-    assert r["flex_searched"] is True                       # main trip still did its flex dates
-    for sec in [*r["routes"].values(), r["qantas"]]:
-        assert sec["flex_searched"] is False
-        assert any("time budget" in e for e in sec["errors"])
+    r = run(settings, now=at(1, 7), fixtures=FIX)            # the Qantas section's flex run
+    assert r["qantas"]["flex_searched"] is False
+    assert any("time budget" in e for e in r["qantas"]["errors"])
     assert "total_s" in r["timings"]
