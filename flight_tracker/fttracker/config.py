@@ -51,6 +51,7 @@ class TripConfig:
     flex_return: list[dt.date]
     flex_mode: str = "cross"
     flex_from_hour: int = 15
+    flex_time_budget_s: float = 170
 
     def date_pairs(self) -> list[tuple[dt.date, dt.date]]:
         """Primary pair first, then the flex combinations."""
@@ -103,6 +104,7 @@ def load_settings(config_path: Path | None = None, env_path: Path | None = None)
         flex_return=[_date(d) for d in t.get("flex", {}).get("return", [])],
         flex_mode=t.get("flex_mode", "cross"),
         flex_from_hour=int(t.get("flex_from_hour", 15)),
+        flex_time_budget_s=float(t.get("flex_time_budget_s", 170)),
     )
     s = raw.get("scoring", {})
     scoring = ScoringConfig(**{k: float(v) for k, v in s.items()})

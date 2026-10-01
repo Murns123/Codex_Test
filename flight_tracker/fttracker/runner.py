@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import time
 import logging
 from pathlib import Path
 from typing import Any
@@ -139,6 +140,7 @@ def _run(settings: Settings, storage: Storage, now: dt.datetime, today: dt.date,
         log.info("Past hard stop – no searches.")
         return {"run_at": now.isoformat(), "status": "stopped", "decision": d.__dict__, "day": None}
 
+    t0 = time.monotonic()
     run_id = storage.start_run(now)
     raw_dir = settings.paths.get("raw_dir", Path("data/raw")) / today.isoformat()
 
@@ -306,10 +308,18 @@ def _run(settings: Settings, storage: Storage, now: dt.datetime, today: dt.date,
     report["routes"] = {}
     history_rows = storage.series_rows(exclude_run_id=run_id) if sections else []
     payload = json.loads(fixtures.read_text()) if fixtures else None
+    report["timings"] = {"main_s": round(time.monotonic() - t0, 1)}
+    budget = float(settings.trip.flex_time_budget_s)
     for name, cfg, prefix in sections:
+        # Vercel stops a function at 300s: once past the budget, later sections check the
+        # primary dates only rather than risk the whole run being killed.
+        sec_flex = flex_this_run and (time.monotonic() - t0) < budget
+        if flex_this_run and not sec_flex:
+            log.warning("%s: past the %.0fs time budget – primary dates only this run", name, budget)
+        ts = time.monotonic()
         try:
             section = qantas.run_section(
-                settings, now=now, flex_this_run=flex_this_run, history_rows=history_rows, save_raw=save_raw,
+                settings, now=now, flex_this_run=sec_flex, history_rows=history_rows, save_raw=save_raw,
                 fetch=qantas.fixture_fetch(payload, prefix) if payload is not None else None,
                 main_best=report["best"], fixture=bool(fixtures),
                 cfg=None if name == "qantas" else cfg, prefix=prefix)
@@ -321,8 +331,12 @@ def _run(settings: Settings, storage: Storage, now: dt.datetime, today: dt.date,
             report["qantas"] = section
         else:
             report["routes"][name] = section
+        if flex_this_run and not sec_flex:
+            section.setdefault("errors", []).append("flex dates skipped this run (time budget)")
+        report["timings"][f"{name}_s"] = round(time.monotonic() - ts, 1)
         report["series"].update(section.get("series") or {})
         report["api_calls"][f"ignav_{name}"] = section.get("calls", 0)
+    report["timings"]["total_s"] = round(time.monotonic() - t0, 1)
     line = summary_line(report)
     report["summary_line"] = line
     storage.finish_run(run_id, status, report, ranked)

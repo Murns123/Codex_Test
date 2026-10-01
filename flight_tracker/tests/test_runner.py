@@ -91,3 +91,21 @@ def test_flex_dates_only_on_evening_run_and_carried_forward(settings):
     assert next_morning["flex_saving"] == evening["flex_saving"]
     assert next_morning["flex_checked_at"] == evening["flex_checked_at"]
     assert next_morning["api_calls"]["fixture"] == 1   # primary pair only
+
+
+def test_flex_window_is_plus_minus_two_days_full_grid(settings):
+    pairs = settings.trip.date_pairs()
+    assert len(pairs) == 25 and pairs[0] == (dt.date(2026, 12, 21), dt.date(2027, 1, 8))
+    assert {o for o, _ in pairs} == {dt.date(2026, 12, d) for d in range(19, 24)}
+    assert {b for _, b in pairs} == {dt.date(2027, 1, d) for d in range(6, 11)}
+
+
+def test_time_budget_drops_flex_for_later_sections(settings):
+    import dataclasses
+    settings.trip = dataclasses.replace(settings.trip, flex_time_budget_s=0)
+    r = run(settings, now=at(1), fixtures=FIX)
+    assert r["flex_searched"] is True                       # main trip still did its flex dates
+    for sec in [*r["routes"].values(), r["qantas"]]:
+        assert sec["flex_searched"] is False
+        assert any("time budget" in e for e in sec["errors"])
+    assert "total_s" in r["timings"]

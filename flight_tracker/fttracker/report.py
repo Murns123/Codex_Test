@@ -476,13 +476,22 @@ def to_html(r: dict[str, Any] | None, recent_runs: list[dict[str, Any]] | None =
 
     by_pair = s.get("today", {}).get("by_date_pair", {})
     if by_pair:
-        parts.append("<h3>Flex dates – best fare per date pair</h3><div class='scroll'><table><thead><tr>"
-                     "<th>Out → Back</th><th class='num'>Best price</th><th class='num'>Value score</th><th>Route</th>"
-                     "</tr></thead><tbody>" + "".join(
-                         f"<tr><td>{_d(k.split('_')[0])} → {_d(k.split('_')[1])}"
-                         + (" <span class='muted small'>(primary)</span>" if k == '2026-12-21_2027-01-08' else "")
-                         + f"</td><td class='num'>{_money(v['best_price'])}</td><td class='num'>{v['best_value']:,.0f}</td>"
-                         f"<td>{_e(v['route'])}</td></tr>" for k, v in by_pair.items()) + "</tbody></table></div>")
+        outs = sorted({k.split("_")[0] for k in by_pair}); rets = sorted({k.split("_")[1] for k in by_pair})
+        top = min(v["best_value"] for v in by_pair.values())
+
+        def cell(o: str, b_: str) -> str:
+            v = by_pair.get(f"{o}_{b_}")
+            if not v:
+                return "<td class='num muted'>–</td>"
+            cls = "num best" if v["best_value"] == top else "num"
+            prim = " <span class='muted small'>(primary)</span>" if (o, b_) == ("2026-12-21", "2027-01-08") else ""
+            return (f"<td class='{cls}'>{_money(v['best_price'])}{prim}<div class='muted small'>value "
+                    f"{v['best_value']:,.0f} · {_e(v['route'])}</div></td>")
+        parts.append("<h3>Flex dates – best fare by date (±2 days)</h3><p class='muted small'>Rows: outbound from MEL · "
+                     "columns: return from ELS · best value score highlighted.</p><div class='scroll'><table><thead><tr>"
+                     "<th></th>" + "".join(f"<th class='num'>{_d(r_)}</th>" for r_ in rets) + "</tr></thead><tbody>"
+                     + "".join(f"<tr><th>{_d(o)}</th>" + "".join(cell(o, r_) for r_ in rets) + "</tr>" for o in outs)
+                     + "</tbody></table></div>")
     by_route = s.get("today", {}).get("by_route", {})
     if by_route:
         parts.append("<h3>By route</h3><div class='scroll'><table><thead><tr><th>Route</th><th class='num'>Options</th>"

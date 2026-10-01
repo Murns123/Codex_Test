@@ -98,7 +98,7 @@ dates and leaves out the domestic Johannesburg → East London connection. It's 
 - A comparison with the full MEL → ELS best fare.
 - A "preferred airline" choice for JEV, in place of the Qantas nonstop question.
 
-**Cost:** it tracks return fares only, which is 1 Ignav call on normal runs and 7 on the 17:00 run.
+**Cost:** it tracks return fares only, which is 1 Ignav call on normal runs and 25 on the 17:00 run (±2-day grid).
 Setting `routes.mel_jnb.one_way: true` adds one-ways.
 
 **Adding another route:** add an entry under `routes:` in config.yaml with an origin, destination,
@@ -151,8 +151,8 @@ It answers 16–18 questions:
 
 As in the main tracker, JEV can only upgrade a HOLD to a BUY, from day 3 at P ≥ 0.80.
 
-**Cost:** Ignav, using `airlines_include: ["QF"]`, takes 3 calls on the 07:00 and 12:00 runs and 15
-on the 17:00 run (7 return date pairs + 8 one-way dates), so about 21 calls a day. Add one JEV call
+**Cost:** Ignav, using `airlines_include: ["QF"]`, takes 3 calls on the 07:00 and 12:00 runs and 35
+on the 17:00 run (25 return date pairs + 10 one-way dates), so about 41 calls a day. Add one JEV call
 per run. If Ignav rejects the airline filter, the request is retried without it and the results are
 filtered locally.
 
@@ -253,17 +253,17 @@ range and a price-history chart. These are shown on the dashboard and sent to JE
 
 **Best option vs flex dates.** The BUY/HOLD rules track the best single-ticket option on the **primary
 dates** (21 Dec / 8 Jan), so every run is compared like for like. Flex dates are searched **once a day** on
-the 17:00 run (`trip.flex_from_hour`) and reported separately as the "best flex-date saving". The two
+the 17:00 run (`trip.flex_from_hour`) – every combination of 19–23 Dec × 6–10 Jan (±2 days) – and reported separately as the "best flex-date saving". The two
 earlier runs carry that result forward, showing when it was last checked.
 
 ## Cost per run
 
 | Service | Calls per run | Per day (3 runs) | Oct 1 → 31 |
 |---|---|---|---|
-| Ignav | 1 on morning and midday runs, 7 on the 17:00 run (all date pairs) | 9 | ~290 |
-| Google Flights (SerpApi) | 4 on morning and midday runs (1 search + 3 return-leg expansions); 16 on the 17:00 run (+2 per flex pair) | 24 | ~770 |
+| Ignav | 5 on morning and midday runs (1 MEL→ELS + 1 MEL⇄JNB + 3 Qantas); ~85 on the 17:00 run (25 date pairs each for MEL→ELS and MEL⇄JNB, 35 for Qantas) | ~95 | ~2,900 |
+| Google Flights (SerpApi) | 2 per run, primary dates only (1 search + 1 return-leg expansion) | 6 | ~186 (Free plan: 250/month) |
 | JEV (optional) | 1 (~8–15k input tokens: stats + top 10 options) | 3 | ~93 |
-| Vercel + Blob | 1 function run of up to ~60s; ~10–20 small JSON writes | ~50 | Hobby free tier normally covers this |
+| Vercel + Blob | 1 function run (the 17:00 run is the longest; past `trip.flex_time_budget_s`, 170s, later sections skip flex dates); ~10–20 small JSON writes | ~50 | Hobby free tier normally covers this |
 
 Cost per run = calls × your plan's per-call price. Check the current prices:
 
