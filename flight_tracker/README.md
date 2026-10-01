@@ -84,6 +84,24 @@ P(buy_now) + P(buy_flex) ≥ `jev.upgrade_hold_threshold` (0.80), and only from 
 a BUY and is never asked for a price. Set the threshold to `null` to make JEV advisory only. If JEV fails,
 the dashboard says so and the rules' decision stands.
 
+### MEL ⇄ JNB section (any airline)
+
+A generic version of the Qantas section. It tracks the **MEL ⇄ JNB return on any airline** on the trip
+dates and leaves out the domestic Johannesburg → East London connection. It's the third card in
+"Today's answers".
+
+**What it adds:**
+- Its own fare history, statistics, rules and JEV evaluation.
+- The cheapest fare by airline, and the fastest return.
+- A comparison with the full MEL → ELS best fare.
+- A "preferred airline" choice for JEV, in place of the Qantas nonstop question.
+
+**Cost:** it tracks return fares only, which is 1 Ignav call on normal runs and 7 on the 17:00 run.
+Setting `routes.mel_jnb.one_way: true` adds one-ways.
+
+**Adding another route:** add an entry under `routes:` in config.yaml with an origin, destination,
+optional `carrier` and a `prefix`.
+
 ### Qantas SYD ⇄ JNB section
 
 The tracker also follows Qantas between Sydney and Johannesburg on the trip dates, with its own

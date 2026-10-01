@@ -900,5 +900,169 @@
     }
    }
   ]
+ },
+ "mj_rt:2026-12-21_2027-01-08": {
+  "itineraries": [
+   {
+    "price": {
+     "amount": 3350,
+     "currency": "AUD"
+    },
+    "outbound": {
+     "duration_minutes": 1050,
+     "segments": [
+      {
+       "origin": "MEL",
+       "destination": "SYD",
+       "marketing_carrier_code": "QF",
+       "flight_number": "400",
+       "departure_time_local": "2026-12-21T06:00:00",
+       "arrival_time_local": "2026-12-21T07:30:00",
+       "duration_minutes": 90
+      },
+      {
+       "origin": "SYD",
+       "destination": "JNB",
+       "marketing_carrier_code": "QF",
+       "flight_number": "63",
+       "departure_time_local": "2026-12-21T10:00:00",
+       "arrival_time_local": "2026-12-21T17:30:00",
+       "duration_minutes": 870
+      }
+     ]
+    },
+    "inbound": {
+     "duration_minutes": 960,
+     "segments": [
+      {
+       "origin": "JNB",
+       "destination": "SYD",
+       "marketing_carrier_code": "QF",
+       "flight_number": "64",
+       "departure_time_local": "2027-01-08T18:00:00",
+       "arrival_time_local": "2027-01-08T14:30:00",
+       "duration_minutes": 720
+      },
+      {
+       "origin": "SYD",
+       "destination": "MEL",
+       "marketing_carrier_code": "QF",
+       "flight_number": "431",
+       "departure_time_local": "2027-01-08T16:30:00",
+       "arrival_time_local": "2027-01-08T18:00:00",
+       "duration_minutes": 90
+      }
+     ]
+    }
+   },
+   {
+    "price": {
+     "amount": 2980,
+     "currency": "AUD"
+    },
+    "outbound": {
+     "duration_minutes": 1450,
+     "segments": [
+      {
+       "origin": "MEL",
+       "destination": "DXB",
+       "marketing_carrier_code": "EK",
+       "flight_number": "409",
+       "departure_time_local": "2026-12-21T21:45:00",
+       "arrival_time_local": "2026-12-21T05:20:00",
+       "duration_minutes": 870
+      },
+      {
+       "origin": "DXB",
+       "destination": "JNB",
+       "marketing_carrier_code": "EK",
+       "flight_number": "761",
+       "departure_time_local": "2026-12-21T09:50:00",
+       "arrival_time_local": "2026-12-21T16:00:00",
+       "duration_minutes": 490
+      }
+     ]
+    },
+    "inbound": {
+     "duration_minutes": 1500,
+     "segments": [
+      {
+       "origin": "JNB",
+       "destination": "DXB",
+       "marketing_carrier_code": "EK",
+       "flight_number": "762",
+       "departure_time_local": "2027-01-08T11:00:00",
+       "arrival_time_local": "2027-01-08T21:00:00",
+       "duration_minutes": 480
+      },
+      {
+       "origin": "DXB",
+       "destination": "MEL",
+       "marketing_carrier_code": "EK",
+       "flight_number": "408",
+       "departure_time_local": "2027-01-08T02:30:00",
+       "arrival_time_local": "2027-01-08T22:00:00",
+       "duration_minutes": 810
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "mj_rt:2026-12-21_2027-01-10": {
+  "itineraries": [
+   {
+    "price": {
+     "amount": 2790,
+     "currency": "AUD"
+    },
+    "outbound": {
+     "duration_minutes": 1450,
+     "segments": [
+      {
+       "origin": "MEL",
+       "destination": "DXB",
+       "marketing_carrier_code": "EK",
+       "flight_number": "409",
+       "departure_time_local": "2026-12-21T21:45:00",
+       "arrival_time_local": "2026-12-21T05:20:00",
+       "duration_minutes": 870
+      },
+      {
+       "origin": "DXB",
+       "destination": "JNB",
+       "marketing_carrier_code": "EK",
+       "flight_number": "761",
+       "departure_time_local": "2026-12-21T09:50:00",
+       "arrival_time_local": "2026-12-21T16:00:00",
+       "duration_minutes": 490
+      }
+     ]
+    },
+    "inbound": {
+     "duration_minutes": 1500,
+     "segments": [
+      {
+       "origin": "JNB",
+       "destination": "DXB",
+       "marketing_carrier_code": "EK",
+       "flight_number": "762",
+       "departure_time_local": "2027-01-10T11:00:00",
+       "arrival_time_local": "2027-01-10T21:00:00",
+       "duration_minutes": 480
+      },
+      {
+       "origin": "DXB",
+       "destination": "MEL",
+       "marketing_carrier_code": "EK",
+       "flight_number": "408",
+       "departure_time_local": "2027-01-10T02:30:00",
+       "arrival_time_local": "2027-01-10T22:00:00",
+       "duration_minutes": 810
+      }
+     ]
+    }
+   }
+  ]
  }
 }

@@ -46,6 +46,29 @@ jev:
   upgrade_hold_threshold: 0.80
   min_days_before_upgrade: 3
 
+# Generic route sections – same engine as the Qantas section, any airline. The domestic
+# JNB -> ELS connection is deliberately left out. Return fares only by default (1 Ignav call
+# on normal runs, 7 on the flex run); set one_way: true to also track one-ways.
+routes:
+  mel_jnb:
+    enabled: true
+    title: "MEL ⇄ JNB (any airline)"
+    prefix: mj                  # series names: mj_rt, mj_out, mj_back
+    origin: MEL
+    destination: JNB
+    carrier: null               # null = any airline
+    one_way: false
+    concurrency: 4
+    step_jump_pct: 8
+    decision:
+      buy_below_baseline_pct: 5
+      rising_runs_for_buy: 2
+      hold_movement_pct: 3
+      buy_under_price: null
+    jev:
+      upgrade_hold_threshold: 0.80
+      min_days_before_upgrade: 3
+
 # Qantas SYD <-> JNB section: return + one-way each direction, Qantas only, same dates as
 # the trip (flex dates on the daily flex run). Uses Ignav: 3 calls on normal runs, up to 15
 # on the flex run (~21/day). Own rules + its own JEV question set.

@@ -296,22 +296,33 @@ def _run(settings: Settings, storage: Storage, now: dt.datetime, today: dt.date,
         "api_calls": {r.provider: r.calls for r in results},
     }
 
-    # --- Qantas SYD <-> JNB section (isolated: a failure here never breaks the main run) ----
+    # --- route sections: generic MEL <-> JNB first, then Qantas SYD <-> JNB ----------------
+    # (isolated: a failure in one never breaks the main run or another section)
+    sections: list[tuple[str, dict[str, Any], str]] = [
+        (name, cfg, cfg.get("prefix", name[:2])) for name, cfg in settings.routes.items() if cfg.get("enabled")]
     if settings.qantas.get("enabled"):
+        sections.append(("qantas", settings.qantas, "qf"))
+    report["series"] = {}
+    report["routes"] = {}
+    history_rows = storage.series_rows(exclude_run_id=run_id) if sections else []
+    payload = json.loads(fixtures.read_text()) if fixtures else None
+    for name, cfg, prefix in sections:
         try:
-            fx_fetch = None
-            if fixtures:
-                fx_fetch = qantas.fixture_fetch(json.loads(fixtures.read_text()))
             section = qantas.run_section(
-                settings, now=now, flex_this_run=flex_this_run,
-                history_rows=storage.series_rows(exclude_run_id=run_id), save_raw=save_raw,
-                fetch=fx_fetch, main_best=report["best"], fixture=bool(fixtures))
+                settings, now=now, flex_this_run=flex_this_run, history_rows=history_rows, save_raw=save_raw,
+                fetch=qantas.fixture_fetch(payload, prefix) if payload is not None else None,
+                main_best=report["best"], fixture=bool(fixtures),
+                cfg=None if name == "qantas" else cfg, prefix=prefix)
         except Exception as exc:
-            log.exception("Qantas section failed")
-            section = {"enabled": True, "status": "failed", "errors": [f"crashed: {exc}"], "calls": 0}
-        report["qantas"] = section
-        report["series"] = section.get("series") or {}
-        report["api_calls"]["ignav_qantas"] = section.get("calls", 0)
+            log.exception("%s section failed", name)
+            section = {"enabled": True, "status": "failed", "errors": [f"crashed: {exc}"], "calls": 0,
+                       "title": cfg.get("title", name), "prefix": prefix}
+        if name == "qantas":
+            report["qantas"] = section
+        else:
+            report["routes"][name] = section
+        report["series"].update(section.get("series") or {})
+        report["api_calls"][f"ignav_{name}"] = section.get("calls", 0)
     line = summary_line(report)
     report["summary_line"] = line
     storage.finish_run(run_id, status, report, ranked)
@@ -356,6 +367,11 @@ def summary_line(r: dict[str, Any]) -> str:
     bp = r["jev"].get("buy_probability")
     if bp is not None:
         parts.append(f"JEV p(book)={bp:.2f}")
+    for sec in (r.get("routes") or {}).values():
+        v = (sec.get("series") or {}).get(f"{sec.get('prefix')}_rt")
+        if v is not None:
+            parts.append(f"{sec.get('origin')}-{sec.get('destination')} return AUD {v:,.0f} "
+                         f"({sec.get('decision', {}).get('decision')})")
     qs = r.get("qantas") or {}
     if qs.get("series", {}).get("qf_rt") is not None:
         parts.append(f"QF SYD-JNB return AUD {qs['series']['qf_rt']:,.0f} ({qs.get('decision', {}).get('decision')})")

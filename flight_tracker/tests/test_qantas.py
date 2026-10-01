@@ -40,7 +40,7 @@ def test_nonstop_detection_and_extras(settings):
     ex = q["stats"]["extra"]
     assert ex["nonstop_premium_aud"] == 240
     assert ex["two_one_ways_aud"] == 3230 and ex["return_vs_two_one_ways_aud"] == 580   # return cheaper
-    assert ex["qf_rt_vs_main_best_aud"] == 2650 - 3420
+    assert ex["rt_vs_main_best_aud"] == 2650 - 3420
 
 
 def test_flex_run_builds_date_matrix_and_cheapest_combo(settings):
@@ -112,3 +112,54 @@ def test_end_to_end_section_in_report_and_history(settings):
     s.close()
     assert "Qantas SYD ⇄ JNB" in page and "QF63" in page and "Return fare by dates" in page
     assert "Qantas SYD ⇄ JNB: ok" in to_text(r)
+
+
+# --- generic MEL <-> JNB section (any airline, domestic leg excluded) ---------------------
+def mj_section(settings, hour=17, rows=None):
+    return qantas.run_section(settings, now=at(1, hour), flex_this_run=hour >= 15, history_rows=rows or [],
+                              save_raw=lambda *a: "", fetch=qantas.fixture_fetch(json.loads(FIX.read_text()), "mj"),
+                              main_best={"price_aud": 3420.0}, fixture=True,
+                              cfg=settings.routes["mel_jnb"], prefix="mj")
+
+
+def test_generic_section_keeps_every_airline(settings):
+    q = mj_section(settings)
+    assert [o["price_aud"] for o in q["options"]["rt"]] == [2980, 3350]       # EK and QF both kept
+    assert q["series"] == {"mj_rt": 2980, "mj_out": None, "mj_back": None}
+    assert q["stats"]["extra"]["cheapest_by_airline"] == {"EK": 2980, "QF": 3350}
+    assert q["title"] == "MEL ⇄ JNB (any airline)" and q["airline"] is None and "note" not in q
+    assert q["cheapest_combo"]["price_aud"] == 2790
+
+
+def test_generic_section_returns_only_and_no_airline_filter(settings):
+    calls = []
+
+    def fetch(kind, body):
+        calls.append((kind, body))
+        return qantas.fixture_fetch(json.loads(FIX.read_text()), "mj")(kind, body)
+
+    qantas.run_section(settings, now=at(1, 7), flex_this_run=False, history_rows=[], save_raw=lambda *a: "",
+                       fetch=fetch, fixture=True, cfg=settings.routes["mel_jnb"], prefix="mj")
+    assert [k for k, _ in calls] == ["rt"]                                     # one_way: false
+    assert "airlines_include" not in calls[0][1] and calls[0][1]["origin"] == "MEL"
+
+
+def test_generic_questions_offer_airline_choice_without_nonstop_or_one_ways():
+    qs = qantas.route_questions(["2026-12-21"], ["2027-01-08"], "MEL", "JNB", None, one_way=False,
+                                carriers=["EK", "QF"])
+    assert qs["preferred_airline"]["criteria"].keys() == {"EK", "QF"}
+    assert "nonstop_worth_premium" not in qs and "one_ways_better_than_return" not in qs
+    assert "book_one_ways_now" not in qs["action"]["criteria"]
+
+
+def test_report_has_three_answers_and_series_kept_apart(settings):
+    run(settings, now=at(1, 17), fixtures=FIX)
+    r = run(settings, now=at(2, 17), fixtures=FIX)
+    assert r["series"]["mj_rt"] == 2980 and r["series"]["qf_rt"] == 2650
+    mj = r["routes"]["mel_jnb"]
+    assert mj["stats"]["mj_rt"]["days_observed"] == 2
+    assert "MEL-JNB return AUD 2,980" in r["summary_line"]
+    page = to_html(r)
+    assert page.count("class='card answer'") == 3
+    assert "MEL ⇄ JNB (any airline)" in page and "Cheapest return by airline" in page
+    assert "domestic" in page
