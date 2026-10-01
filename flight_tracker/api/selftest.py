@@ -98,10 +98,16 @@ class handler(BaseHTTPRequestHandler):
                 ok = False
             else:
                 stamp = dt.datetime.now(dt.timezone.utc).isoformat()
-                store.put_json("selftest/probe.json", {"written_at": stamp})
+                probe = f"selftest/probe-{stamp[:10]}.json"   # fresh path: overwritten blobs can read stale
+                store.put_json(probe, {"written_at": stamp})
                 out["checks"]["put"] = "ok"
-                out["checks"]["list"] = store.list("selftest/")
-                got = store.get_json("selftest/probe.json")
+                out["checks"]["list"] = len(store.list("selftest/"))
+                got = store.get_json(probe)
+                if got and got.get("written_at") != stamp:
+                    # same-day re-run hits an overwritten path – a stale read here is expected CDN behaviour
+                    probe = f"selftest/probe-{stamp}.json".replace(":", "")
+                    store.put_json(probe, {"written_at": stamp})
+                    got = store.get_json(probe)
                 out["checks"]["get"] = "ok" if got and got.get("written_at") == stamp else f"unexpected: {got}"
                 out["checks"]["runs_indexed"] = len(storage.recent_runs(10_000))
                 ok = out["checks"]["get"] == "ok"

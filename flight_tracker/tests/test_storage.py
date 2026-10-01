@@ -26,6 +26,7 @@ def test_doc_storage_end_to_end(settings, tmp_path):
     assert r["day"] == 2 and r["trend"]["previous"]["date"] == "2026-10-01"
     s = DocStorage(store)
     assert len(s.recent_runs()) == 4 and len(s.log_lines()) == 4
+    assert len(store.list("index/")) == 4
     assert s.latest_report()["run_id"] == r["run_id"] == 20261002070000
     assert store.get_json(f"runs/{r['run_id']}.json")["itineraries"]
 
@@ -34,10 +35,31 @@ def test_doc_storage_rebuilds_missing_index(settings, tmp_path):
     store = LocalDirStore(tmp_path / "blob")
     run(settings, now=at(1), fixtures=FIX, storage=DocStorage(store))
     run(settings, now=at(2), fixtures=FIX, storage=DocStorage(store))
-    (tmp_path / "blob" / INDEX).unlink()
+    import shutil
+    shutil.rmtree(tmp_path / "blob" / "index")
     r = run(settings, now=at(3), fixtures=FIX, storage=DocStorage(store))
     assert r["day"] == 3   # baseline survived
-    assert len(store.get_json(INDEX)) == 3
+    assert len(store.list("index/")) == 1 and len(DocStorage(store).recent_runs()) == 3
+
+
+def test_index_files_are_never_overwritten(settings, tmp_path):
+    """Blob's CDN can serve stale copies of overwritten files, so storage only ever adds files."""
+    store = LocalDirStore(tmp_path / "blob")
+    writes = []
+    orig = store.put_json
+    store.put_json = lambda path, obj: (writes.append(path), orig(path, obj))[1]
+    for d, h in [(1, 7), (1, 12), (2, 7)]:
+        run(settings, now=at(d, h), fixtures=FIX, storage=DocStorage(store))
+    assert len(writes) == len(set(writes)), "a path was written twice"
+    assert INDEX not in writes
+
+
+def test_legacy_index_file_is_still_read(settings, tmp_path):
+    store = LocalDirStore(tmp_path / "blob")
+    store.put_json(INDEX, [{"id": 20260930120000, "run_at": "2026-09-30T12:00:00+10:00", "run_date": "2026-09-30",
+                            "status": "ok", "best_value": 5000.0, "best_price": 4000.0, "summary_line": "legacy"}])
+    r = run(settings, now=at(1), fixtures=FIX, storage=DocStorage(store))
+    assert r["day"] == 2 and r["trend"]["baseline"]["value_score"] == 5000.0
 
 
 def test_doc_storage_dry_run_writes_nothing(settings, tmp_path):

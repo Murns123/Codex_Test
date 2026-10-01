@@ -14,6 +14,7 @@ import datetime as dt
 import json
 import logging
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -186,7 +187,8 @@ class SqliteStorage:
 
 
 # ---------------------------------------------------------------------------------------
-INDEX = "runs/index.json"
+INDEX = "runs/index.json"          # legacy single index file (read only, never rewritten)
+INDEX_DIR = "index/"               # one immutable row file per run
 INDEX_FIELDS = ("id", "run_at", "run_date", "status", "decision", "rule", "reason",
                 "best_value", "best_price", "best_route", "summary_line")
 
@@ -204,26 +206,30 @@ class DocStorage:
 
     # -- index -------------------------------------------------------------------------
     def _load_index(self) -> list[dict[str, Any]]:
+        """Rows from the immutable index/<id>.json files. Blob reads go through a CDN that can
+        serve a stale copy of an overwritten file, so nothing here is ever overwritten: each run
+        adds its own row file and the folder listing (an API call, not cached) is the truth."""
         if self._index is None:
-            idx = self.store.get_json(INDEX)
-            if idx is None:
-                idx = self._rebuild_index()
-            self._index = sorted(idx, key=lambda r: (r["run_at"], r["id"]))
+            paths = [p for p in self.store.list(INDEX_DIR) if p.endswith(".json")]
+            rows: dict[int, dict[str, Any]] = {}
+            for r in self.store.get_json(INDEX) or []:     # written by the very first version
+                rows[r["id"]] = r
+            with ThreadPoolExecutor(max_workers=16) as pool:
+                for r in pool.map(self.store.get_json, paths):
+                    if r:
+                        rows[r["id"]] = r
+            # self-heal: any run document without an index row gets its row recovered
+            missing = [p for p in self.store.list("runs/")
+                       if p.endswith(".json") and p != INDEX
+                       and p.rsplit("/", 1)[-1][:-5].isdigit() and int(p.rsplit("/", 1)[-1][:-5]) not in rows]
+            if missing:
+                log.warning("recovering %d index rows from run documents", len(missing))
+                with ThreadPoolExecutor(max_workers=8) as pool:
+                    for doc in pool.map(self.store.get_json, missing):
+                        if doc and "row" in doc:
+                            rows[doc["row"]["id"]] = doc["row"]
+            self._index = sorted(rows.values(), key=lambda r: (r["run_at"], r["id"]))
         return self._index
-
-    def _rebuild_index(self) -> list[dict[str, Any]]:
-        """If index.json is missing, rebuild it from the per-run documents (never start empty
-        while run documents exist – that would silently reset the baseline)."""
-        rows = []
-        for path in self.store.list("runs/"):
-            if path == INDEX or not path.endswith(".json"):
-                continue
-            doc = self.store.get_json(path)
-            if doc and "row" in doc:
-                rows.append(doc["row"])
-        if rows:
-            log.warning("runs/index.json missing – rebuilt from %d run documents", len(rows))
-        return rows
 
     # -- writes --------------------------------------------------------------------------
     def start_run(self, run_at: dt.datetime) -> int:
@@ -255,8 +261,8 @@ class DocStorage:
             "row": row, "report": report,
             "itineraries": [it.to_dict() for it in itineraries],
         })
+        self.store.put_json(f"{INDEX_DIR}{run_id}.json", row)
         index = [r for r in self._load_index() if r["id"] != run_id] + [row]
-        self.store.put_json(INDEX, index)
         self._index = sorted(index, key=lambda r: (r["run_at"], r["id"]))
 
     def append_log(self, run_id: int, run_date: dt.date, line: str) -> None:
