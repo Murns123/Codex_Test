@@ -122,3 +122,14 @@ def test_time_budget_drops_flex_for_later_sections(settings):
     assert r["qantas"]["flex_searched"] is False
     assert any("time budget" in e for e in r["qantas"]["errors"])
     assert "total_s" in r["timings"]
+
+
+def test_flex_saving_is_remeasured_against_todays_primary_fare(settings):
+    from fttracker.runner import _flex_saving
+    by_pair = {"2026-12-21_2027-01-08": {"best_price": 4590, "best_value": 4827},
+               "2026-12-21_2027-01-09": {"best_price": 3717, "best_value": 4405},
+               "2026-12-22_2027-01-08": {"best_price": 4458, "best_value": 4695}}
+    fs = _flex_saving(by_pair, settings)
+    assert fs == {"dates": "21 Dec–9 Jan", "value_saving": 422, "price_saving": 873}
+    by_pair["2026-12-21_2027-01-08"] = {"best_price": 3000, "best_value": 3100}
+    assert _flex_saving(by_pair, settings) is None

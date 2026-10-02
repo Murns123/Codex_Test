@@ -119,6 +119,21 @@ def suggestions(best: Itinerary | None, its: list[Itinerary], tstats: dict[str, 
     return out[:3]
 
 
+def _flex_saving(by_pair: dict[str, Any], settings: Settings) -> dict[str, Any] | None:
+    """Best flex pair vs the primary pair, from a by_date_pair map (best_price/best_value)."""
+    key = f"{settings.trip.outbound}_{settings.trip.return_date}"
+    prim = by_pair.get(key)
+    flex = [(k, v) for k, v in by_pair.items() if k != key and v.get("best_value") is not None]
+    if not prim or not flex:
+        return None
+    k, v = min(flex, key=lambda kv: kv[1]["best_value"])
+    if v["best_value"] >= prim["best_value"]:
+        return None
+    o, r = (dt.date.fromisoformat(x) for x in k.split("_"))
+    return {"dates": f"{o:%-d %b}–{r:%-d %b}", "value_saving": round(prim["best_value"] - v["best_value"], 2),
+            "price_saving": round(prim["best_price"] - v["best_price"], 2)}
+
+
 FLEX_SLOTS = {"morning": (0, 10), "midday": (10, 15), "evening": (15, 24)}
 
 
@@ -212,9 +227,10 @@ def _run(settings: Settings, storage: Storage, now: dt.datetime, today: dt.date,
         # carry the last flex-date check forward so the dashboard always shows one
         prev = storage.latest_report()
         if prev and prev.get("flex_checked_at"):
-            tstats["flex_saving"] = prev.get("flex_saving")
             tstats["by_date_pair"] = {**prev.get("stats", {}).get("today", {}).get("by_date_pair", {}),
                                       **tstats["by_date_pair"]}
+            # re-measure the saving against today's primary fare, not the one from the flex run
+            tstats["flex_saving"] = _flex_saving(tstats["by_date_pair"], settings)
             flex_checked_at = prev["flex_checked_at"]
     extras: dict[str, Any] = {}
     for r in results:
