@@ -15,6 +15,7 @@ import datetime as dt
 import json
 import logging
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -336,12 +337,15 @@ class IgnavProvider(FareProvider):
         # Calls run in parallel (keeps a run inside the Vercel time limit); results are
         # processed in order on this thread because storage connections aren't thread-safe.
         workers = max(1, int(self.cfg.get("concurrency", 4)))
+        t0 = time.monotonic()
         with ThreadPoolExecutor(max_workers=workers) as pool:
             fetched = list(pool.map(fetch, pairs))
             # Ignav sometimes answers a date pair with an upstream error or an empty list that
             # a second try fills in – retry those once
             redo = [i for i, (_, payload, err) in enumerate(fetched) if err is not None or not _items(payload)]
-            if redo and self.cfg.get("retry_empty", True):
+            # ...but only while there is time left in the run (Vercel stops it at 300s)
+            if redo and self.cfg.get("retry_empty", True) and \
+                    time.monotonic() - t0 < float(self.cfg.get("retry_within_s", 110)):
                 for i, again in zip(redo, pool.map(fetch, [pairs[i] for i in redo])):
                     res.calls += 1
                     if again[2] is None and (_items(again[1]) or fetched[i][2] is not None):

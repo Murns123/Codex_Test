@@ -477,7 +477,7 @@ def to_html(r: dict[str, Any] | None, recent_runs: list[dict[str, Any]] | None =
     by_pair = s.get("today", {}).get("by_date_pair", {})
     if by_pair:
         outs = sorted({k.split("_")[0] for k in by_pair}); rets = sorted({k.split("_")[1] for k in by_pair})
-        top = min(v["best_value"] for v in by_pair.values())
+        top = min((v["best_value"] for v in by_pair.values() if not v.get("too_long")), default=None)
 
         def cell(o: str, b_: str) -> str:
             v = by_pair.get(f"{o}_{b_}")
@@ -485,10 +485,11 @@ def to_html(r: dict[str, Any] | None, recent_runs: list[dict[str, Any]] | None =
                 return "<td class='num muted'>–</td>"
             cls = "num best" if v["best_value"] == top else "num"
             prim = " <span class='muted small'>(primary)</span>" if (o, b_) == ("2026-12-21", "2027-01-08") else ""
+            long_ = " · over 30h" if v.get("too_long") else ""
             return (f"<td class='{cls}'>{_money(v['best_price'])}{prim}<div class='muted small'>value "
-                    f"{v['best_value']:,.0f} · {_e(v['route'])}</div></td>")
+                    f"{v['best_value']:,.0f} · {_e(v['route'])}{long_}</div></td>")
         parts.append("<h3>Flex dates – best fare by date (±2 days)</h3><p class='muted small'>Rows: outbound from MEL · "
-                     "columns: return from ELS · best value score highlighted.</p><div class='scroll'><table><thead><tr>"
+                     "columns: return from ELS · best value score highlighted · “over 30h” = every option that day is over 30h one way.</p><div class='scroll'><table><thead><tr>"
                      "<th></th>" + "".join(f"<th class='num'>{_d(r_)}</th>" for r_ in rets) + "</tr></thead><tbody>"
                      + "".join(f"<tr><th>{_d(o)}</th>" + "".join(cell(o, r_) for r_ in rets) + "</tr>" for o in outs)
                      + "</tbody></table></div>")

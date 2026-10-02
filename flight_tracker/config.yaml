@@ -107,7 +107,8 @@ providers:
     base_url: https://ignav.com/api
     endpoint: /fares/round-trip
     timeout_s: 60
-    concurrency: 6              # date pairs searched in parallel
+    concurrency: 9              # date pairs searched in parallel (25 pairs = 3 rounds, ~20s per search)
+    retry_within_s: 110         # retry empty/failed pairs once, only if the first pass finished by then
     send_currency: false        # Ignav rejects "currency"; USD quotes are converted at the ECB rate
     fx_url: https://api.frankfurter.app/latest
     # extra_body: {max_stops: 3}  # merged into every request body

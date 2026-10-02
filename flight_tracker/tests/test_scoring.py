@@ -61,3 +61,19 @@ def test_best_single_ticket_ignores_self_transfer_and_prefers_unflagged():
 
 def test_best_single_ticket_none_when_only_self_transfer():
     assert best_single_ticket(score_all([itin(2000, single=False)], CFG)) is None
+
+
+def test_flex_grid_keeps_pairs_whose_options_are_all_over_30h(settings):
+    import dataclasses
+    import datetime as dt
+    from fttracker.stats import today_stats
+    prim = itin(4600, 22.5, 26)                                       # 21 Dec / 8 Jan, fine
+    long19 = dataclasses.replace(itin(4000, 34, 31), outbound_date=dt.date(2026, 12, 19))
+    ok20 = dataclasses.replace(itin(4200, 23, 23), outbound_date=dt.date(2026, 12, 20))
+    its = score_all([prim, long19, ok20], CFG)
+    assert long19.too_long                                           # only AUD 200 cheaper -> flagged
+    grid = today_stats(its, settings)["by_date_pair"]
+    assert grid["2026-12-19_2027-01-08"]["too_long"] is True         # shown, flagged – not dropped
+    assert grid["2026-12-20_2027-01-08"]["too_long"] is False
+    fs = today_stats(its, settings)["flex_saving"]
+    assert fs["dates"] == "20 Dec–8 Jan"                            # saving never points at an over-30h pair

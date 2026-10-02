@@ -123,7 +123,8 @@ def _flex_saving(by_pair: dict[str, Any], settings: Settings) -> dict[str, Any] 
     """Best flex pair vs the primary pair, from a by_date_pair map (best_price/best_value)."""
     key = f"{settings.trip.outbound}_{settings.trip.return_date}"
     prim = by_pair.get(key)
-    flex = [(k, v) for k, v in by_pair.items() if k != key and v.get("best_value") is not None]
+    flex = [(k, v) for k, v in by_pair.items()
+            if k != key and v.get("best_value") is not None and not v.get("too_long")]
     if not prim or not flex:
         return None
     k, v = min(flex, key=lambda kv: kv[1]["best_value"])

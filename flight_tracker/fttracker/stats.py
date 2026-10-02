@@ -71,14 +71,17 @@ def today_stats(its: list[Itinerary], settings: Settings) -> dict[str, Any]:
     by_route: dict[str, list[Itinerary]] = defaultdict(list)
     for i in single:
         by_route[i.route].append(i)
+    # every date pair with a single-ticket fare: its best option under the time limit, or,
+    # when all of that pair's options are over it, its best option flagged too_long
     by_pair: dict[str, list[Itinerary]] = defaultdict(list)
-    for i in ok:
+    for i in single:
         by_pair[f"{i.outbound_date}_{i.return_date}"].append(i)
 
-    pair_best = {k: min(v, key=lambda i: i.value_score) for k, v in by_pair.items()}
+    pair_best = {k: min([i for i in v if not i.too_long] or v, key=lambda i: i.value_score)
+                 for k, v in by_pair.items()}
     primary_key = f"{primary[0]}_{primary[1]}"
     primary_best = pair_best.get(primary_key)
-    flex = [v for k, v in pair_best.items() if k != primary_key]
+    flex = [v for k, v in pair_best.items() if k != primary_key and not v.too_long]
     best_flex = min(flex, key=lambda i: i.value_score, default=None)
     flex_saving = None
     if primary_best and best_flex and best_flex.value_score < primary_best.value_score:
@@ -113,7 +116,7 @@ def today_stats(its: list[Itinerary], settings: Settings) -> dict[str, Any]:
             for r, v in sorted(by_route.items())
         },
         "by_date_pair": {
-            k: {"best_price": v.price, "best_value": v.value_score, "route": v.route}
+            k: {"best_price": v.price, "best_value": v.value_score, "route": v.route, "too_long": v.too_long}
             for k, v in sorted(pair_best.items())
         },
         "primary_dates_best": option_summary(primary_best) if primary_best else None,
