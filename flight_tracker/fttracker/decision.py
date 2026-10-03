@@ -43,10 +43,12 @@ def rising_streak(series: list[float]) -> int:
     return n
 
 
-def decide(today: dt.date, current: Point | None, history: list[Point], cfg: DecisionConfig) -> Decision:
+def decide(today: dt.date, current: Point | None, history: list[Point], cfg: DecisionConfig,
+           runs_today: list[float] | None = None) -> Decision:
     """`history` = earlier observations (oldest first, today excluded), one per day or per
     run depending on trend_basis. history[0] is the baseline. `current` = today's best
-    single-ticket option, or None if nothing usable was retrieved."""
+    single-ticket option, or None if nothing usable was retrieved. `runs_today` = values from
+    earlier runs today, used to confirm a sudden large move before acting on it."""
     day = len({p.date for p in history} | {today})
     baseline = history[0].value_score if history else (current.value_score if current else None)
 
@@ -67,6 +69,16 @@ def decide(today: dt.date, current: Point | None, history: list[Point], cfg: Dec
     d.vs_baseline_pct = pct_change(current.value_score, baseline) if baseline and history else 0.0
     d.vs_previous_pct = pct_change(current.value_score, prev) if prev else None
     d.rising_streak = rising_streak([p.value_score for p in history] + [current.value_score])
+
+    jump = d.vs_previous_pct
+    confirmed = any(abs(pct_change(current.value_score, v)) < 10 for v in (runs_today or []))
+    if (today < cfg.book_by and jump is not None and abs(jump) >= cfg.suspect_jump_pct and not confirmed):
+        # one provider gap (e.g. the usual fares missing from a response) can swing the best
+        # option by tens of percent – don't buy on a single unconfirmed reading
+        d.rule = "unconfirmed_jump"
+        d.reason = (f"Best option moved {jump:+.1f}% in one step – more likely a gap in today's search results "
+                    "than a real fare change. Holding until another run confirms it.")
+        return d
 
     if today >= cfg.book_by:
         final = " Today is the hard stop." if today == cfg.hard_stop else ""

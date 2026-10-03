@@ -133,3 +133,23 @@ def test_flex_saving_is_remeasured_against_todays_primary_fare(settings):
     assert fs == {"dates": "21 Dec–9 Jan", "value_saving": 422, "price_saving": 873}
     by_pair["2026-12-21_2027-01-08"] = {"best_price": 3000, "best_value": 3100}
     assert _flex_saving(by_pair, settings) is None
+
+
+def test_daily_close_is_the_median_run_so_one_glitch_cannot_set_the_trend(settings):
+    from fttracker.runner import _history
+
+    class S:
+        def scored_runs(self, exclude_run_id=None):
+            return [{"id": i, "run_date": d, "best_value": v, "best_price": v}
+                    for i, (d, v) in enumerate([("2026-10-01", 4832), ("2026-10-02", 5101), ("2026-10-02", 4827),
+                                                ("2026-10-02", 4834), ("2026-10-03", 4855), ("2026-10-03", 4848),
+                                                ("2026-10-03", 6597)])]
+    pts, today = _history(S(), -1, dt.date(2026, 10, 4), "day")
+    assert [p.value_score for p in pts] == [4832, 4834, 4855]
+
+
+def test_section_daily_close_is_the_median_run():
+    from fttracker.qantas import daily_closes
+    rows = [{"run_date": "2026-10-03", "series": {"mj_rt": v}} for v in (2561, 2569, 2918)]
+    closes, _ = daily_closes(rows, "mj_rt", dt.date(2026, 10, 4))
+    assert closes == [(dt.date(2026, 10, 3), 2569)]

@@ -83,7 +83,7 @@ def ow_summary(o: OneWay, airline: str | None = "Qantas") -> dict[str, Any]:
 # --- statistics ---------------------------------------------------------------------------
 def daily_closes(rows: list[dict[str, Any]], series: str, today: dt.date) -> tuple[list[tuple[dt.date, float]], list[float]]:
     """(earlier daily closes, values from earlier runs today) for one series."""
-    closes: dict[str, float] = {}
+    by_day: dict[str, list[float]] = {}
     today_vals: list[float] = []
     for r in rows:   # oldest first
         v = (r.get("series") or {}).get(series)
@@ -92,7 +92,9 @@ def daily_closes(rows: list[dict[str, Any]], series: str, today: dt.date) -> tup
         if r["run_date"] == today.isoformat():
             today_vals.append(v)
         else:
-            closes[r["run_date"]] = v
+            by_day.setdefault(r["run_date"], []).append(v)
+    # median run per day (lower middle for an even count): one glitchy run can't set the trend
+    closes = {d: sorted(vs)[(len(vs) - 1) // 2] for d, vs in by_day.items()}
     return [(dt.date.fromisoformat(d), v) for d, v in sorted(closes.items())], today_vals
 
 
@@ -267,9 +269,11 @@ def run_section(settings: Settings, *, now: dt.datetime, flex_this_run: bool, hi
     today = now.date()
     stats: dict[str, Any] = {}
     closes_by_series: dict[str, list[tuple[dt.date, float]]] = {}
+    closes_today: dict[str, list[float]] = {}
     for sname in S:
         closes, today_vals = daily_closes(history_rows, sname, today)
         closes_by_series[sname] = closes
+        closes_today[sname] = today_vals
         stats[sname] = history_stats([(d, v, v) for d, v in closes], current[sname], today_vals)
         vals = [v for _, v in closes] + ([current[sname]] if current[sname] is not None else [])
         stats[sname]["steps"] = step_jumps(vals, float(q.get("step_jump_pct", 8)))
@@ -309,7 +313,7 @@ def run_section(settings: Settings, *, now: dt.datetime, flex_this_run: bool, hi
                    hold_movement_pct=float(dq.get("hold_movement_pct", base.hold_movement_pct)))
     hist_pts = [Point(d, v, v) for d, v in closes_by_series[S[0]]]
     cur_pt = Point(today, best_rt.price, best_rt.price) if best_rt else None
-    decision = decide(today, cur_pt, hist_pts, dcfg)
+    decision = decide(today, cur_pt, hist_pts, dcfg, closes_today.get(S[0]))
 
     # --- JEV ------------------------------------------------------------------------------------
     jev_res: dict[str, Any] = {"ok": False, "skipped": True, "answers": {}, "buy_probability": None, "error": None}

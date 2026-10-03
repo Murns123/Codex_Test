@@ -122,3 +122,19 @@ def test_jev_needs_min_days_and_data():
 
 def test_jev_advisory_only_when_threshold_none():
     assert apply_jev(decide(D, cur(3550), pts(3600, 3600), CFG), 0.99, None).decision == "HOLD"
+
+
+def test_big_unconfirmed_jump_holds_instead_of_buying():
+    # 4831 -> 4834 -> 6597 would be "rising twice", but the 36% step is one reading
+    d = decide(D, cur(6597, 4918), pts(4831, 4834), CFG, runs_today=[4855, 4848])
+    assert (d.decision, d.rule) == ("HOLD", "unconfirmed_jump") and "+36" in d.reason
+
+
+def test_big_jump_confirmed_by_an_earlier_run_today_is_acted_on():
+    d = decide(D, cur(3400), pts(4800, 4810), CFG, runs_today=[3450])     # -29%, seen twice today
+    assert d.rule != "unconfirmed_jump" and d.decision == "BUY"
+
+
+def test_book_by_still_forces_buy_even_on_a_jump():
+    d = decide(dt.date(2026, 10, 15), cur(6500), pts(4800, 4810), CFG)
+    assert (d.decision, d.rule) == ("BUY", "book_by")

@@ -65,10 +65,13 @@ def _history(storage: Storage, run_id: int, today: dt.date, basis: str) -> tuple
     runs_today = [r["best_value"] for r in rows if r["run_date"] == today.isoformat()]
     if basis == "run":
         return [Point(dt.date.fromisoformat(r["run_date"]), r["best_value"], r["best_price"]) for r in rows], runs_today
-    closes: dict[str, dict[str, Any]] = {}
-    for r in rows:                     # rows are oldest first, so the last one per date wins
+    by_day: dict[str, list[dict[str, Any]]] = {}
+    for r in rows:
         if r["run_date"] != today.isoformat():
-            closes[r["run_date"]] = r
+            by_day.setdefault(r["run_date"], []).append(r)
+    # a day's close is its median run (lower middle for an even count), so one glitchy run
+    # can't set the trend on its own
+    closes = {d: sorted(rs, key=lambda r: r["best_value"])[(len(rs) - 1) // 2] for d, rs in by_day.items()}
     pts = [Point(dt.date.fromisoformat(d), r["best_value"], r["best_price"]) for d, r in sorted(closes.items())]
     return pts, runs_today
 
@@ -220,7 +223,7 @@ def _run(settings: Settings, storage: Storage, now: dt.datetime, today: dt.date,
 
     history, runs_today = _history(storage, run_id, today, dcfg.trend_basis)
     current = Point(today, best.value_score, best.price) if best else None
-    decision: Decision = decide(today, current, history, dcfg)
+    decision: Decision = decide(today, current, history, dcfg, runs_today)
 
     tstats = today_stats(its, settings)
     flex_checked_at = now.isoformat() if flex_this_run else None

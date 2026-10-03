@@ -344,8 +344,9 @@ class IgnavProvider(FareProvider):
             # a second try fills in – retry those once
             redo = [i for i, (_, payload, err) in enumerate(fetched) if err is not None or not _items(payload)]
             # ...but only while there is time left in the run (Vercel stops it at 300s)
-            if redo and self.cfg.get("retry_empty", True) and \
-                    time.monotonic() - t0 < float(self.cfg.get("retry_within_s", 110)):
+            if time.monotonic() - t0 >= float(self.cfg.get("retry_within_s", 110)):
+                redo = [i for i in redo if i == 0]      # short on time: still retry the primary pair
+            if redo and self.cfg.get("retry_empty", True):
                 for i, again in zip(redo, pool.map(fetch, [pairs[i] for i in redo])):
                     res.calls += 1
                     if again[2] is None and (_items(again[1]) or fetched[i][2] is not None):

@@ -33,6 +33,7 @@ class DecisionConfig:
     buy_under_price: float = 3000
     rising_runs_for_buy: int = 2
     hold_movement_pct: float = 3
+    suspect_jump_pct: float = 25      # a one-step move this big waits for a second run to confirm it
     book_by: dt.date = dt.date(2026, 10, 14)
     hard_stop: dt.date = dt.date(2026, 10, 31)
     trend_basis: str = "day"
